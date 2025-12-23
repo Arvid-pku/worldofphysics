@@ -1,5 +1,6 @@
 "use client";
 
+import { I18nProvider } from "@/components/i18n/I18nProvider";
 import { Sidebar } from "@/components/sandbox/Sidebar";
 import { HoverTooltip } from "@/components/sandbox/overlays/HoverTooltip";
 import { InspectorPanel } from "@/components/sandbox/overlays/InspectorPanel";
@@ -9,17 +10,18 @@ import { SimulationCanvas } from "@/components/sandbox/SimulationCanvas";
 
 export default function PhysicsSandbox() {
   return (
-    <SandboxProvider>
-      <div className="flex h-full w-full">
-        <Sidebar />
-        <div className="relative flex-1 overflow-hidden">
-          <SimulationCanvas />
-          <TopControls />
-          <InspectorPanel />
-          <HoverTooltip />
+    <I18nProvider>
+      <SandboxProvider>
+        <div className="flex h-full w-full">
+          <Sidebar />
+          <div className="relative flex-1 overflow-hidden">
+            <SimulationCanvas />
+            <TopControls />
+            <InspectorPanel />
+            <HoverTooltip />
+          </div>
         </div>
-      </div>
-    </SandboxProvider>
+      </SandboxProvider>
+    </I18nProvider>
   );
 }
-

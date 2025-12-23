@@ -1,9 +1,11 @@
 "use client";
 
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { cn } from "@/lib/utils/cn";
 
 export function HoverTooltip() {
+  const { t } = useI18n();
   const { hoverReadout, hoveredBodyId } = useSandbox();
   const visible = Boolean(hoverReadout && hoveredBodyId);
   if (!hoverReadout) return null;
@@ -17,14 +19,13 @@ export function HoverTooltip() {
       style={{ left: hoverReadout.screenX + 14, top: hoverReadout.screenY + 14 }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-slate-400">Velocity</span>
+        <span className="text-slate-400">{t("hover.velocity")}</span>
         <span className="tabular-nums">{hoverReadout.velocity.toFixed(2)}</span>
       </div>
       <div className="mt-1 flex items-center justify-between">
-        <span className="text-slate-400">Kinetic Energy</span>
+        <span className="text-slate-400">{t("hover.kineticEnergy")}</span>
         <span className="tabular-nums">{hoverReadout.kineticEnergy.toFixed(2)}</span>
       </div>
     </div>
   );
 }
-

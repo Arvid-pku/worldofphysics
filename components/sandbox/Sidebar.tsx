@@ -3,7 +3,6 @@
 import {
   Cable,
   Circle,
-  Compass,
   Hand,
   Link2,
   Magnet,
@@ -16,6 +15,8 @@ import {
   Zap
 } from "lucide-react";
 
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import type { ToolId } from "@/lib/physics/types";
 import { cn } from "@/lib/utils/cn";
@@ -28,6 +29,7 @@ type ToolButtonProps = {
 
 function ToolButton({ id, label, icon }: ToolButtonProps) {
   const { tool, setTool } = useSandbox();
+  const { t } = useI18n();
   const active = tool === id;
   return (
     <button
@@ -50,7 +52,7 @@ function ToolButton({ id, label, icon }: ToolButtonProps) {
       </span>
       <span className="truncate">{label}</span>
       <span className="ml-auto text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">
-        {id === "pan" ? "drag" : "click"}
+        {id === "pan" ? t("sidebar.hint.drag") : t("sidebar.hint.click")}
       </span>
     </button>
   );
@@ -66,64 +68,62 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function Sidebar() {
+  const { t } = useI18n();
   return (
     <aside className="flex h-full w-[320px] flex-col gap-5 border-r border-slate-900 bg-slate-950/80 p-4">
       <header className="flex items-center justify-between">
         <div className="space-y-1">
-          <div className="text-sm font-semibold text-slate-100">Physics Sandbox</div>
-          <div className="text-xs text-slate-500">Mechanics + E/M</div>
+          <div className="text-sm font-semibold text-slate-100">{t("sidebar.title")}</div>
+          <div className="text-xs text-slate-500">{t("sidebar.subtitle")}</div>
         </div>
-        <div className="grid h-9 w-9 place-items-center rounded-md border border-slate-800 bg-slate-950/60 text-slate-200">
-          <Compass className="h-4 w-4" />
-        </div>
+        <LanguageSwitcher />
       </header>
 
       <div className="flex-1 space-y-5 overflow-auto pr-1 [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]">
-        <Section title="Navigate">
-          <ToolButton id="select" label="Select" icon={<MousePointer2 className="h-4 w-4" />} />
-          <ToolButton id="pan" label="Pan / Orbit" icon={<Hand className="h-4 w-4" />} />
+        <Section title={t("sidebar.section.navigate")}>
+          <ToolButton id="select" label={t("tool.select")} icon={<MousePointer2 className="h-4 w-4" />} />
+          <ToolButton id="pan" label={t("tool.pan")} icon={<Hand className="h-4 w-4" />} />
         </Section>
 
-        <Section title="Shapes">
-          <ToolButton id="circle" label="Circle" icon={<Circle className="h-4 w-4" />} />
-          <ToolButton id="rectangle" label="Rectangle" icon={<Square className="h-4 w-4" />} />
-          <ToolButton id="polygon" label="Polygon" icon={<Triangle className="h-4 w-4" />} />
+        <Section title={t("sidebar.section.shapes")}>
+          <ToolButton id="circle" label={t("tool.circle")} icon={<Circle className="h-4 w-4" />} />
+          <ToolButton id="rectangle" label={t("tool.rectangle")} icon={<Square className="h-4 w-4" />} />
+          <ToolButton id="polygon" label={t("tool.polygon")} icon={<Triangle className="h-4 w-4" />} />
         </Section>
 
-        <Section title="Constraints">
-          <ToolButton id="rod" label="Rigid Rod" icon={<Link2 className="h-4 w-4" />} />
-          <ToolButton id="rope" label="Rope (Chain)" icon={<Cable className="h-4 w-4" />} />
-          <ToolButton id="spring" label="Spring" icon={<Waves className="h-4 w-4" />} />
+        <Section title={t("sidebar.section.constraints")}>
+          <ToolButton id="rod" label={t("tool.rod")} icon={<Link2 className="h-4 w-4" />} />
+          <ToolButton id="rope" label={t("tool.rope")} icon={<Cable className="h-4 w-4" />} />
+          <ToolButton id="spring" label={t("tool.spring")} icon={<Waves className="h-4 w-4" />} />
         </Section>
 
-        <Section title="Statics">
-          <ToolButton id="wall" label="Wall" icon={<Square className="h-4 w-4" />} />
-          <ToolButton id="slope" label="Slope" icon={<TrendingUp className="h-4 w-4" />} />
-          <ToolButton id="track" label="Track (Bezier)" icon={<Spline className="h-4 w-4" />} />
+        <Section title={t("sidebar.section.statics")}>
+          <ToolButton id="wall" label={t("tool.wall")} icon={<Square className="h-4 w-4" />} />
+          <ToolButton id="slope" label={t("tool.slope")} icon={<TrendingUp className="h-4 w-4" />} />
+          <ToolButton id="track" label={t("tool.track")} icon={<Spline className="h-4 w-4" />} />
         </Section>
 
-        <Section title="Fields">
-          <ToolButton id="field_e_rect" label="Electric Field (Rect)" icon={<Zap className="h-4 w-4" />} />
-          <ToolButton id="field_e_circle" label="Electric Field (Circle)" icon={<Zap className="h-4 w-4" />} />
-          <ToolButton id="field_b_rect" label="Magnetic Field (Rect)" icon={<Magnet className="h-4 w-4" />} />
-          <ToolButton id="field_b_circle" label="Magnetic Field (Circle)" icon={<Magnet className="h-4 w-4" />} />
+        <Section title={t("sidebar.section.fields")}>
+          <ToolButton id="field_e_rect" label={t("tool.fieldErect")} icon={<Zap className="h-4 w-4" />} />
+          <ToolButton id="field_e_circle" label={t("tool.fieldEcircle")} icon={<Zap className="h-4 w-4" />} />
+          <ToolButton id="field_b_rect" label={t("tool.fieldBrect")} icon={<Magnet className="h-4 w-4" />} />
+          <ToolButton id="field_b_circle" label={t("tool.fieldBcircle")} icon={<Magnet className="h-4 w-4" />} />
         </Section>
 
         <div className="rounded-lg border border-slate-900 bg-slate-950/60 p-3 text-xs text-slate-400">
-          Tip: Hold <span className="text-slate-200">Ctrl</span> while scrolling to zoom. Use{" "}
-          <span className="text-slate-200">Pan</span> to move around an “infinite” vertical world.
+          {t("sidebar.tip")}
         </div>
       </div>
 
       <footer className="flex items-center justify-between text-xs text-slate-500">
-        <span className="truncate">Matter.js + custom E/M</span>
+        <span className="truncate">{t("sidebar.footer")}</span>
         <a
           className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-900/60 hover:text-slate-100"
           href="https://brm.io/matter-js/"
           target="_blank"
           rel="noreferrer"
         >
-          Docs
+          {t("sidebar.docs")}
         </a>
       </footer>
     </aside>

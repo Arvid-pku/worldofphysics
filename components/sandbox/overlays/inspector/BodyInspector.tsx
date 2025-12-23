@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as Matter from "matter-js";
 import { RotateCw, Shield, Zap } from "lucide-react";
 
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureBodyMeta, findBodyByMetaId } from "@/lib/physics/bodyMeta";
 import type { ChargeDistribution } from "@/lib/physics/types";
@@ -141,6 +142,7 @@ function Toggle({
 }
 
 export function BodyInspector({ bodyId }: { bodyId: string }) {
+  const { t } = useI18n();
   const { engineRef } = useSandbox();
 
   const body = useMemo(() => {
@@ -185,7 +187,11 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
   }, [bodyId, body]);
 
   if (!body) {
-    return <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">Body not found.</div>;
+    return (
+      <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">
+        {t("body.notFound")}
+      </div>
+    );
   }
 
   const meta = ensureBodyMeta(body);
@@ -210,7 +216,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
   return (
     <div>
       <div className={cn("rounded-xl border border-slate-800/70 bg-slate-950/40 p-3", glowClass)}>
-        <div className="text-xs text-slate-500">Label</div>
+        <div className="text-xs text-slate-500">{t("body.label")}</div>
         <input
           value={label}
           onChange={(e) => {
@@ -222,21 +228,21 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
         />
       </div>
 
-      <Section title="Mass / Density / Volume" icon={<Shield className="h-3.5 w-3.5" />}>
+      <Section title={t("section.triad")} icon={<Shield className="h-3.5 w-3.5" />}>
         <div className="grid grid-cols-3 gap-3">
-          <LabeledNumber label="Mass" hint="m" value={triad.mass} onChange={(v) => onTriadChange("mass", v)} />
-          <LabeledNumber label="Density" hint="ρ" value={triad.density} onChange={(v) => onTriadChange("density", v)} />
-          <LabeledNumber label="Volume" hint="V" value={triad.volume} onChange={(v) => onTriadChange("volume", v)} />
+          <LabeledNumber label={t("triad.mass")} hint="m" value={triad.mass} onChange={(v) => onTriadChange("mass", v)} />
+          <LabeledNumber label={t("triad.density")} hint="ρ" value={triad.density} onChange={(v) => onTriadChange("density", v)} />
+          <LabeledNumber label={t("triad.volume")} hint="V" value={triad.volume} onChange={(v) => onTriadChange("volume", v)} />
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
-          Tip: Enter any two values to auto-calculate the third.
+          {t("triad.tip")}
         </div>
       </Section>
 
-      <Section title="Material" icon={<RotateCw className="h-3.5 w-3.5" />}>
+      <Section title={t("section.material")} icon={<RotateCw className="h-3.5 w-3.5" />}>
         <div className="grid gap-3">
           <LabeledSlider
-            label="Restitution"
+            label={t("material.restitution")}
             value={restitution}
             min={0}
             max={1}
@@ -247,7 +253,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
           />
           <LabeledSlider
-            label="Friction (Kinetic)"
+            label={t("material.friction")}
             value={friction}
             min={0}
             max={1}
@@ -258,7 +264,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
           />
           <LabeledSlider
-            label="Friction (Static)"
+            label={t("material.frictionStatic")}
             value={frictionStatic}
             min={0}
             max={1}
@@ -271,10 +277,10 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
         </div>
       </Section>
 
-      <Section title="Electromagnetism" icon={<Zap className="h-3.5 w-3.5" />}>
+      <Section title={t("section.em")} icon={<Zap className="h-3.5 w-3.5" />}>
         <div className="grid gap-3">
           <Toggle
-            label="Is Charged"
+            label={t("em.isCharged")}
             checked={isCharged}
             onChange={(v) => {
               setIsCharged(v);
@@ -283,7 +289,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           />
 
           <LabeledNumber
-            label="Charge (q)"
+            label={t("em.charge")}
             value={charge}
             onChange={(v) => {
               setCharge(v);
@@ -294,7 +300,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           />
 
           <label className="grid gap-1">
-            <div className="text-xs text-slate-400">Distribution</div>
+            <div className="text-xs text-slate-400">{t("em.distribution")}</div>
             <select
               value={distribution}
               onChange={(e) => {
@@ -304,18 +310,18 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               }}
               className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
             >
-              <option value="point">Point</option>
-              <option value="uniform">Uniform</option>
+              <option value="point">{t("em.distribution.point")}</option>
+              <option value="uniform">{t("em.distribution.uniform")}</option>
             </select>
           </label>
         </div>
       </Section>
 
-      <Section title="Kinematics">
+      <Section title={t("section.kinematics")}>
         <div className="grid grid-cols-3 gap-3">
-          <LabeledNumber label="Vel X" value={velX} onChange={setVelX} />
-          <LabeledNumber label="Vel Y" value={velY} onChange={setVelY} />
-          <LabeledNumber label="Ang Vel" value={angVel} onChange={setAngVel} />
+          <LabeledNumber label={t("kin.velX")} value={velX} onChange={setVelX} />
+          <LabeledNumber label={t("kin.velY")} value={velY} onChange={setVelY} />
+          <LabeledNumber label={t("kin.angVel")} value={angVel} onChange={setAngVel} />
         </div>
         <div className="mt-3 flex items-center gap-2">
           <button
@@ -329,7 +335,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
             className="h-9 flex-1 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
           >
-            Apply
+            {t("kin.apply")}
           </button>
           <button
             type="button"
@@ -342,7 +348,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
             className="h-9 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
           >
-            Zero
+            {t("kin.zero")}
           </button>
         </div>
       </Section>

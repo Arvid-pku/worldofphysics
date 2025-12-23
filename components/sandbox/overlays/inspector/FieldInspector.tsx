@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Magnet, Trash2, Zap } from "lucide-react";
 
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { normalizeAngleRad } from "@/lib/physics/fields";
 import type { FieldRegion } from "@/lib/physics/types";
@@ -90,6 +91,7 @@ function updateField(prev: FieldRegion[], next: FieldRegion) {
 }
 
 export function FieldInspector({ fieldId }: { fieldId: string }) {
+  const { t } = useI18n();
   const { fields, setFields, setSelected } = useSandbox();
 
   const field = useMemo(() => fields.find((f) => f.id === fieldId) ?? null, [fieldId, fields]);
@@ -101,10 +103,14 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
   }, [field]);
 
   if (!field) {
-    return <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">Field not found.</div>;
+    return (
+      <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">
+        {t("field.notFound")}
+      </div>
+    );
   }
 
-  const title = field.kind === "electric" ? "Electric Field" : "Magnetic Field";
+  const title = field.kind === "electric" ? t("field.electric") : t("field.magnetic");
   const badge = field.kind === "electric" ? <Zap className="h-3.5 w-3.5" /> : <Magnet className="h-3.5 w-3.5" />;
 
   const outline =
@@ -120,12 +126,12 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               <span>{title}</span>
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              {field.shape === "rect" ? "Rectangular region" : "Circular region"}
+              {field.shape === "rect" ? t("field.shapeRect") : t("field.shapeCircle")}
             </div>
           </div>
           <button
             type="button"
-            title="Delete field"
+            title={t("field.delete")}
             onClick={() => {
               setFields((prev) => prev.filter((f) => f.id !== field.id));
               setSelected({ kind: "none" });
@@ -137,23 +143,23 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
         </div>
       </div>
 
-      <Section title="Region">
+      <Section title={t("section.region")}>
         {field.shape === "rect" ? (
           <div className="grid grid-cols-2 gap-3">
             <LabeledNumber
-              label="Width"
+              label={t("region.width")}
               value={field.width ?? 0}
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, width: Math.max(40, v) }))}
             />
             <LabeledNumber
-              label="Height"
+              label={t("region.height")}
               value={field.height ?? 0}
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, height: Math.max(40, v) }))}
             />
           </div>
         ) : (
           <LabeledNumber
-            label="Radius"
+            label={t("region.radius")}
             value={field.radius ?? 0}
             onChange={(v) => setFields((prev) => updateField(prev, { ...field, radius: Math.max(24, v) }))}
           />
@@ -161,10 +167,10 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
       </Section>
 
       {field.kind === "electric" ? (
-        <Section title="Vector" icon={<Zap className="h-3.5 w-3.5" />}>
+        <Section title={t("section.vector")} icon={<Zap className="h-3.5 w-3.5" />}>
           <div className="grid gap-3">
             <LabeledSlider
-              label="Magnitude"
+              label={t("field.magnitude")}
               value={field.magnitude}
               min={-5}
               max={5}
@@ -174,7 +180,7 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
 
             <div className="grid grid-cols-2 gap-3">
               <LabeledNumber
-                label="Direction (deg)"
+                label={t("field.direction")}
                 hint="θ"
                 value={angleDeg}
                 onChange={(v) => {
@@ -192,7 +198,7 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
                 }}
                 className="mt-6 h-9 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
               >
-                From Field
+                {t("field.fromField")}
               </button>
             </div>
 
@@ -219,10 +225,10 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
           </div>
         </Section>
       ) : (
-        <Section title="Strength" icon={<Magnet className="h-3.5 w-3.5" />}>
+        <Section title={t("section.strength")} icon={<Magnet className="h-3.5 w-3.5" />}>
           <div className="grid gap-2">
             <LabeledSlider
-              label="B (out/in of screen)"
+              label={t("field.bField")}
               value={field.strength}
               min={-5}
               max={5}
@@ -230,7 +236,7 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, strength: v }))}
             />
             <div className="text-[11px] text-slate-500">
-              Positive = out of screen (•), negative = into screen (×).
+              {t("field.bHint")}
             </div>
           </div>
         </Section>
