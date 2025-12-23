@@ -1,0 +1,30 @@
+"use client";
+
+import { useSandbox } from "@/components/sandbox/SandboxContext";
+import { cn } from "@/lib/utils/cn";
+
+export function HoverTooltip() {
+  const { hoverReadout, hoveredBodyId } = useSandbox();
+  const visible = Boolean(hoverReadout && hoveredBodyId);
+  if (!hoverReadout) return null;
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute z-30 min-w-[190px] rounded-lg border border-slate-800/70 bg-slate-950/40 px-3 py-2 text-xs text-slate-200 shadow-lg backdrop-blur transition",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+      style={{ left: hoverReadout.screenX + 14, top: hoverReadout.screenY + 14 }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-slate-400">Velocity</span>
+        <span className="tabular-nums">{hoverReadout.velocity.toFixed(2)}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-slate-400">Kinetic Energy</span>
+        <span className="tabular-nums">{hoverReadout.kineticEnergy.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+}
+
