@@ -5,6 +5,7 @@ import * as Matter from "matter-js";
 
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureBodyMeta, findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
+import { setBodyRopeGroup, setBodyShape, setConstraintRopeGroup } from "@/lib/physics/bodyShape";
 import { applyElectromagnetism } from "@/lib/physics/em";
 import { isPointInField } from "@/lib/physics/fields";
 import type { FieldRegion, ToolId } from "@/lib/physics/types";
@@ -39,18 +40,20 @@ export function SimulationCanvas() {
     resetNonce,
     isRunning,
     timeScale,
-	    gravity,
-	    tool,
-	    showCollisionPoints,
-	    showVelocityVectors,
-	    fields,
-	    setFields,
-	    selected,
-	    hoveredBodyId,
-	    setSelected,
-	    setHoveredBodyId,
-	    setHoverReadout
-	  } = useSandbox();
+    gravity,
+    tool,
+    showCollisionPoints,
+    showVelocityVectors,
+    fields,
+    selected,
+    hoveredBodyId,
+    pointerWorldRef,
+    commitWorldAdd,
+    commitFieldAdd,
+    setSelected,
+    setHoveredBodyId,
+    setHoverReadout
+  } = useSandbox();
 
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const collisionsRef = useRef<CollisionMark[]>([]);
@@ -523,6 +526,7 @@ export function SimulationCanvas() {
           lastPointerScreenRef.current = { x, y };
           const world = screenToWorld(x, y, rect);
           lastPointerWorldRef.current = world;
+          pointerWorldRef.current = world;
 
           const shouldPan = tool === "pan" || e.button === 1 || e.altKey;
           if (shouldPan) {
@@ -561,32 +565,37 @@ export function SimulationCanvas() {
             return;
           }
 
-          if (tool === "rod" || tool === "spring" || tool === "rope") {
-            const body = queryBodyAtPoint(engine, world);
-            if (!body) {
-              pendingConstraintRef.current = null;
-              return;
-            }
-            const pending = pendingConstraintRef.current;
-            if (!pending) {
-              pendingConstraintRef.current = { tool, body };
-              const meta = ensureBodyMeta(body, { label: body.label || "Body" });
-              setSelected({ kind: "body", id: meta.id });
-              return;
-            }
-            if (pending.body.id === body.id) {
-              pendingConstraintRef.current = null;
-              return;
-            }
-            if (tool === "rope") {
-              addRopeChain(engine, pending.body, body);
-            } else {
-              const constraint = createConstraint(tool, pending.body, body);
-              Matter.World.add(engine.world, constraint);
-            }
-            pendingConstraintRef.current = null;
-            return;
-          }
+	          if (tool === "rod" || tool === "spring" || tool === "rope") {
+	            const body = queryBodyAtPoint(engine, world);
+	            if (!body) {
+	              pendingConstraintRef.current = null;
+	              return;
+	            }
+	            const pending = pendingConstraintRef.current;
+	            if (!pending) {
+	              pendingConstraintRef.current = { tool, body };
+	              const meta = ensureBodyMeta(body, { label: body.label || "Body" });
+	              setSelected({ kind: "body", id: meta.id });
+	              return;
+	            }
+	            if (pending.body.id === body.id) {
+	              pendingConstraintRef.current = null;
+	              return;
+	            }
+	            if (tool === "rope") {
+	              const rope = addRopeChain(pending.body, body);
+	              commitWorldAdd({
+	                bodies: rope.bodies,
+	                constraints: rope.constraints,
+	                selectionAfter: selected
+	              });
+	            } else {
+	              const constraint = createConstraint(tool, pending.body, body);
+	              commitWorldAdd({ constraints: [constraint], selectionAfter: selected });
+	            }
+	            pendingConstraintRef.current = null;
+	            return;
+	          }
 
           if (tool === "select") {
             const field = queryFieldAtPoint(fieldsRef.current, world);
@@ -627,6 +636,7 @@ export function SimulationCanvas() {
           lastPointerScreenRef.current = { x, y };
           const world = screenToWorld(x, y, rect);
           lastPointerWorldRef.current = world;
+          pointerWorldRef.current = world;
 
           const interaction = interactionRef.current;
           if (interaction.kind === "pan" && interaction.pointerId === e.pointerId) {
@@ -669,33 +679,45 @@ export function SimulationCanvas() {
             canvas.releasePointerCapture(e.pointerId);
             return;
           }
-          if (interaction.kind === "drag" && interaction.pointerId === e.pointerId) {
-            Matter.World.remove(engine.world, interaction.dragConstraint);
-            interactionRef.current = { kind: "none" };
-            canvas.releasePointerCapture(e.pointerId);
-            return;
-          }
-          if (interaction.kind === "draw" && interaction.pointerId === e.pointerId) {
-            const field = createFieldFromDraw(interaction);
-            if (field) {
-              setFields((prev) => [...prev, field]);
-              setSelected({ kind: "field", id: field.id });
-              interactionRef.current = { kind: "none" };
-              canvas.releasePointerCapture(e.pointerId);
-              return;
-            }
+	          if (interaction.kind === "drag" && interaction.pointerId === e.pointerId) {
+	            Matter.World.remove(engine.world, interaction.dragConstraint);
+	            interactionRef.current = { kind: "none" };
+	            canvas.releasePointerCapture(e.pointerId);
+	            return;
+	          }
+	          if (interaction.kind === "draw" && interaction.pointerId === e.pointerId) {
+	            const selectionBefore = selected;
+	            const field = createFieldFromDraw(interaction);
+	            if (field) {
+	              commitFieldAdd({
+	                field,
+	                selectionBefore,
+	                selectionAfter: { kind: "field", id: field.id }
+	              });
+	              interactionRef.current = { kind: "none" };
+	              canvas.releasePointerCapture(e.pointerId);
+	              return;
+	            }
 
-            const created = finalizeDraw(engine, interaction);
-            interactionRef.current = { kind: "none" };
-            canvas.releasePointerCapture(e.pointerId);
-            if (created) setSelected({ kind: "body", id: created });
-          }
-        }}
+	            const created = finalizeDraw(interaction);
+	            interactionRef.current = { kind: "none" };
+	            canvas.releasePointerCapture(e.pointerId);
+	            if (created?.selectedId) {
+	              commitWorldAdd({
+	                bodies: created.bodies,
+	                constraints: created.constraints,
+	                selectionBefore,
+	                selectionAfter: { kind: "body", id: created.selectedId }
+	              });
+	            }
+	          }
+	        }}
         onPointerLeave={() => {
           setHoveredBodyId(null);
           setHoverReadout(null);
           lastPointerScreenRef.current = null;
           lastPointerWorldRef.current = null;
+          pointerWorldRef.current = null;
         }}
         className={cn(
           "h-full w-full select-none",
@@ -725,12 +747,13 @@ function createConstraint(tool: "rod" | "spring", a: Matter.Body, b: Matter.Body
   return Matter.Constraint.create({ bodyA: a, bodyB: b, length: len, stiffness: 0.03, damping: 0.08 });
 }
 
-function addRopeChain(engine: Matter.Engine, a: Matter.Body, b: Matter.Body) {
+function addRopeChain(a: Matter.Body, b: Matter.Body) {
   const start = a.position;
   const end = b.position;
   const dist = Math.hypot(start.x - end.x, start.y - end.y);
 
   const group = Matter.Body.nextGroup(true);
+  const ropeGroupId = createId("rope");
   const segments = Math.min(18, Math.max(6, Math.floor(dist / 60)));
   const radius = 7;
   const segmentLength = dist / (segments + 1);
@@ -749,6 +772,8 @@ function addRopeChain(engine: Matter.Engine, a: Matter.Body, b: Matter.Body) {
       frictionStatic: 0.4
     });
     ensureBodyMeta(part, { label: "Rope Segment" });
+    setBodyShape(part, { kind: "circle", radius });
+    setBodyRopeGroup(part, ropeGroupId);
     ropeBodies.push(part);
   }
 
@@ -761,13 +786,16 @@ function addRopeChain(engine: Matter.Engine, a: Matter.Body, b: Matter.Body) {
       stiffness: 0.9,
       damping: 0.02
     });
+    setConstraintRopeGroup(c, ropeGroupId);
     ropeConstraints.push(c);
   }
 
-  Matter.World.add(engine.world, [...ropeBodies, ...ropeConstraints]);
+  return { bodies: ropeBodies, constraints: ropeConstraints };
 }
 
-function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, { kind: "draw" }>): string | null {
+function finalizeDraw(
+  interaction: Extract<Interaction, { kind: "draw" }>
+): { bodies: Matter.Body[]; constraints: Matter.Constraint[]; selectedId: string | null } | null {
   const { startWorld, currentWorld, tool } = interaction;
   const dx = currentWorld.x - startWorld.x;
   const dy = currentWorld.y - startWorld.y;
@@ -784,8 +812,8 @@ function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, {
     const r = Math.max(10, Math.hypot(dx, dy));
     const body = Matter.Bodies.circle(startWorld.x, startWorld.y, r, opts);
     const meta = ensureBodyMeta(body, { label: "Circle" });
-    Matter.World.add(engine.world, body);
-    return meta.id;
+    setBodyShape(body, { kind: "circle", radius: r });
+    return { bodies: [body], constraints: [], selectedId: meta.id };
   }
 
   if (tool === "polygon") {
@@ -793,8 +821,8 @@ function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, {
     const sides = 5;
     const body = Matter.Bodies.polygon(startWorld.x, startWorld.y, sides, r, opts);
     const meta = ensureBodyMeta(body, { label: "Polygon" });
-    Matter.World.add(engine.world, body);
-    return meta.id;
+    setBodyShape(body, { kind: "polygon", sides, radius: r });
+    return { bodies: [body], constraints: [], selectedId: meta.id };
   }
 
   if (tool === "slope") {
@@ -803,8 +831,8 @@ function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, {
     const thickness = 22;
     const body = Matter.Bodies.rectangle(centerX, centerY, len, thickness, { ...opts, isStatic: true, angle });
     const meta = ensureBodyMeta(body, { label: "Slope" });
-    Matter.World.add(engine.world, body);
-    return meta.id;
+    setBodyShape(body, { kind: "rectangle", width: len, height: thickness });
+    return { bodies: [body], constraints: [], selectedId: meta.id };
   }
 
   if (tool === "track") {
@@ -852,12 +880,13 @@ function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, {
       const cy = (a.y + b.y) / 2;
       const seg = Matter.Bodies.rectangle(cx, cy, segLen, thickness, { ...opts, isStatic: true, angle });
       ensureBodyMeta(seg, { label: "Track" });
+      setBodyShape(seg, { kind: "rectangle", width: segLen, height: thickness });
       bodies.push(seg);
     }
 
     if (bodies.length === 0) return null;
-    Matter.World.add(engine.world, bodies);
-    return getBodyMeta(bodies[0])?.id ?? null;
+    const selectedId = getBodyMeta(bodies[0])?.id ?? null;
+    return { bodies, constraints: [], selectedId };
   }
 
   if (tool === "rectangle" || tool === "wall") {
@@ -865,8 +894,8 @@ function finalizeDraw(engine: Matter.Engine, interaction: Extract<Interaction, {
     const h = Math.max(24, Math.abs(dy));
     const body = Matter.Bodies.rectangle(centerX, centerY, w, h, { ...opts, isStatic: tool === "wall" });
     const meta = ensureBodyMeta(body, { label: tool === "wall" ? "Wall" : "Rectangle" });
-    Matter.World.add(engine.world, body);
-    return meta.id;
+    setBodyShape(body, { kind: "rectangle", width: w, height: h });
+    return { bodies: [body], constraints: [], selectedId: meta.id };
   }
 
   // Fields are handled in a later step.

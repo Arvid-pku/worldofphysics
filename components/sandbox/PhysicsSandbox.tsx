@@ -1,6 +1,7 @@
 "use client";
 
 import { I18nProvider } from "@/components/i18n/I18nProvider";
+import { KeyboardShortcuts } from "@/components/sandbox/KeyboardShortcuts";
 import { Sidebar } from "@/components/sandbox/Sidebar";
 import { HoverTooltip } from "@/components/sandbox/overlays/HoverTooltip";
 import { InspectorPanel } from "@/components/sandbox/overlays/InspectorPanel";
@@ -12,6 +13,7 @@ export default function PhysicsSandbox() {
   return (
     <I18nProvider>
       <SandboxProvider>
+        <KeyboardShortcuts />
         <div className="flex h-full w-full">
           <Sidebar />
           <div className="relative flex-1 overflow-hidden">

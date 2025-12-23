@@ -92,7 +92,7 @@ function updateField(prev: FieldRegion[], next: FieldRegion) {
 
 export function FieldInspector({ fieldId }: { fieldId: string }) {
   const { t } = useI18n();
-  const { fields, setFields, setSelected } = useSandbox();
+  const { fields, setFields, deleteFieldById } = useSandbox();
 
   const field = useMemo(() => fields.find((f) => f.id === fieldId) ?? null, [fieldId, fields]);
   const [angleDeg, setAngleDeg] = useState(0);
@@ -133,8 +133,7 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
             type="button"
             title={t("field.delete")}
             onClick={() => {
-              setFields((prev) => prev.filter((f) => f.id !== field.id));
-              setSelected({ kind: "none" });
+              deleteFieldById(field.id);
             }}
             className="grid h-9 w-9 place-items-center rounded-md border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-900/50"
           >
