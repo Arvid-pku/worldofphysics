@@ -1,6 +1,7 @@
 export type ToolId =
   | "select"
   | "pan"
+  | "velocity"
   | "ruler"
   | "protractor"
   | "circle"
@@ -75,4 +76,23 @@ export type HoverReadout = {
   velocity: number;
   force: number;
   kineticEnergy: number;
+};
+
+export type Vec2 = { x: number; y: number };
+
+export type FbdAxesMode = "world" | "contact";
+
+export type FbdReadout = {
+  bodyId: string;
+  net: Vec2; // ΣF
+  gravity: Vec2;
+  coulomb: Vec2;
+  electric: Vec2;
+  magnetic: Vec2;
+  em: Vec2;
+  contact: Vec2; // residual after subtracting gravity + EM
+  normal: Vec2;
+  friction: Vec2;
+  normalAxis: Vec2 | null; // unit vector
+  tangentAxis: Vec2 | null; // unit vector
 };

@@ -87,6 +87,8 @@ export function TopControls() {
     setShowTrails,
     showGraphs,
     setShowGraphs,
+    showFbd,
+    setShowFbd,
     snapEnabled,
     setSnapEnabled,
     snapStepMeters,
@@ -163,6 +165,15 @@ export function TopControls() {
             className="h-4 w-4 accent-blue-500"
           />
           {t("controls.graphs")}
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={showFbd}
+            onChange={(e) => setShowFbd(e.target.checked)}
+            className="h-4 w-4 accent-blue-500"
+          />
+          {t("controls.fbd")}
         </label>
         <div className="mx-2 h-8 w-px bg-slate-800" />
         <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">

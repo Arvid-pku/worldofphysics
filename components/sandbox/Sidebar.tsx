@@ -2,6 +2,7 @@
 
 import {
   Cable,
+  BookOpen,
   Circle,
   DraftingCompass,
   Hand,
@@ -9,6 +10,7 @@ import {
   Magnet,
   MoveRight,
   MousePointer2,
+  Navigation2,
   Ruler,
   Spline,
   Square,
@@ -73,6 +75,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function Sidebar() {
   const { t } = useI18n();
+  const { setShowLabs } = useSandbox();
   return (
     <aside className="flex h-full w-[320px] flex-col gap-5 border-r border-slate-900 bg-slate-950/80 p-4">
       <header className="flex items-center justify-between">
@@ -80,7 +83,17 @@ export function Sidebar() {
           <div className="text-sm font-semibold text-slate-100">{t("sidebar.title")}</div>
           <div className="text-xs text-slate-500">{t("sidebar.subtitle")}</div>
         </div>
-        <LanguageSwitcher />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title={t("labs.open")}
+            onClick={() => setShowLabs(true)}
+            className="grid h-9 w-9 place-items-center rounded-md border border-slate-800 bg-slate-950/60 text-slate-200 hover:bg-slate-900/60"
+          >
+            <BookOpen className="h-4 w-4" />
+          </button>
+          <LanguageSwitcher />
+        </div>
       </header>
 
       <div className="flex-1 space-y-5 overflow-auto pr-1 [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]">
@@ -90,6 +103,7 @@ export function Sidebar() {
         </Section>
 
         <Section title={t("sidebar.section.measure")}>
+          <ToolButton id="velocity" label={t("tool.velocity")} icon={<Navigation2 className="h-4 w-4" />} />
           <ToolButton id="ruler" label={t("tool.ruler")} icon={<Ruler className="h-4 w-4" />} />
           <ToolButton id="protractor" label={t("tool.protractor")} icon={<DraftingCompass className="h-4 w-4" />} />
         </Section>

@@ -7,7 +7,7 @@ import { findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { applyBodyState, type ApplyBodyStateOptions, type BodyState } from "@/lib/physics/bodyState";
 import { getBodyRopeGroup, getConstraintRopeGroup } from "@/lib/physics/bodyShape";
 import { createBodyFromSnapshot, snapshotBody, type BodySnapshot } from "@/lib/physics/snapshot";
-import type { FieldRegion, HoverReadout, SelectedEntity, ToolId } from "@/lib/physics/types";
+import type { FbdAxesMode, FbdReadout, FieldRegion, HoverReadout, SelectedEntity, ToolId } from "@/lib/physics/types";
 import { createId } from "@/lib/utils/id";
 
 type WorldPoint = { x: number; y: number };
@@ -29,6 +29,23 @@ export type SandboxState = {
   setGravity: (value: number) => void;
   timeScale: number;
   setTimeScale: (value: number) => void;
+  showLabs: boolean;
+  setShowLabs: (value: boolean) => void;
+  activeLabId: string | null;
+  setActiveLabId: (id: string | null) => void;
+  labStepIndex: number;
+  setLabStepIndex: (value: number) => void;
+  startLab: (labId: string) => void;
+  restartLab: () => void;
+  nextLabStep: (stepCount: number) => void;
+  prevLabStep: () => void;
+  consumePendingLabId: () => string | null;
+  showFbd: boolean;
+  setShowFbd: (value: boolean) => void;
+  fbdAxesMode: FbdAxesMode;
+  setFbdAxesMode: (value: FbdAxesMode) => void;
+  fbdReadout: FbdReadout | null;
+  setFbdReadout: (r: FbdReadout | null) => void;
   showVelocityVectors: boolean;
   setShowVelocityVectors: (value: boolean) => void;
   showCollisionPoints: boolean;
@@ -86,10 +103,17 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const clipboardRef = useRef<EditorClipboard>(null);
   const undoStackRef = useRef<EditorAction[]>([]);
   const redoStackRef = useRef<EditorAction[]>([]);
+  const pendingLabIdRef = useRef<string | null>(null);
 
   const [isRunning, setIsRunning] = useState(true);
   const [gravity, setGravity] = useState(9.8);
   const [timeScale, setTimeScale] = useState(1);
+  const [showLabs, setShowLabs] = useState(false);
+  const [activeLabId, setActiveLabId] = useState<string | null>(null);
+  const [labStepIndex, setLabStepIndex] = useState(0);
+  const [showFbd, setShowFbd] = useState(false);
+  const [fbdAxesMode, setFbdAxesMode] = useState<FbdAxesMode>("world");
+  const [fbdReadout, setFbdReadout] = useState<FbdReadout | null>(null);
   const [showVelocityVectors, setShowVelocityVectors] = useState(false);
   const [showCollisionPoints, setShowCollisionPoints] = useState(true);
   const [showTrails, setShowTrails] = useState(false);
@@ -518,6 +542,35 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
     setResetNonce((v) => v + 1);
   }, [clearHistory, clearSelection]);
 
+  const consumePendingLabId = useCallback(() => {
+    const id = pendingLabIdRef.current;
+    pendingLabIdRef.current = null;
+    return id;
+  }, []);
+
+  const startLab = useCallback(
+    (labId: string) => {
+      pendingLabIdRef.current = labId;
+      setActiveLabId(labId);
+      setLabStepIndex(0);
+      requestReset();
+    },
+    [requestReset]
+  );
+
+  const restartLab = useCallback(() => {
+    if (!activeLabId) return;
+    startLab(activeLabId);
+  }, [activeLabId, startLab]);
+
+  const nextLabStep = useCallback((stepCount: number) => {
+    setLabStepIndex((i) => Math.min(Math.max(0, stepCount - 1), i + 1));
+  }, []);
+
+  const prevLabStep = useCallback(() => {
+    setLabStepIndex((i) => Math.max(0, i - 1));
+  }, []);
+
   const value = useMemo<SandboxState>(
     () => ({
       engineRef,
@@ -528,6 +581,23 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setGravity,
       timeScale,
       setTimeScale,
+      showLabs,
+      setShowLabs,
+      activeLabId,
+      setActiveLabId,
+      labStepIndex,
+      setLabStepIndex,
+      startLab,
+      restartLab,
+      nextLabStep,
+      prevLabStep,
+      consumePendingLabId,
+      showFbd,
+      setShowFbd,
+      fbdAxesMode,
+      setFbdAxesMode,
+      fbdReadout,
+      setFbdReadout,
       showVelocityVectors,
       setShowVelocityVectors,
       showCollisionPoints,
@@ -595,12 +665,23 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       selectBody,
       selectField,
       setSelectedBodies,
+      activeLabId,
+      consumePendingLabId,
+      labStepIndex,
+      nextLabStep,
+      prevLabStep,
+      restartLab,
+      showLabs,
+      fbdAxesMode,
+      fbdReadout,
+      showFbd,
       showCollisionPoints,
       showGraphs,
       showTrails,
       showVelocityVectors,
       snapEnabled,
       snapStepMeters,
+      startLab,
       timeScale,
       tool,
       undo

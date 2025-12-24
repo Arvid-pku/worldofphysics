@@ -4,13 +4,21 @@ import React, { useEffect, useMemo, useRef } from "react";
 import * as Matter from "matter-js";
 
 import { useSandbox } from "@/components/sandbox/SandboxContext";
+import { buildLabScene, type LabId } from "@/lib/labs/labs";
 import { ensureBodyMeta, findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { getBodyShape, inferBodyShape, setBodyRopeGroup, setBodyShape, setConstraintRopeGroup, type BodyShape } from "@/lib/physics/bodyShape";
 import { applyConveyorBelts, ensureConveyorMeta, getConveyorMeta } from "@/lib/physics/conveyor";
 import { applyElectromagnetism } from "@/lib/physics/em";
 import { isPointInField } from "@/lib/physics/fields";
 import type { FieldRegion, ToolId } from "@/lib/physics/types";
-import { BASE_DELTA_MS, metersToWorld, worldToMeters, worldVelocityStepToMps } from "@/lib/physics/units";
+import {
+  BASE_DELTA_MS,
+  PX_PER_METER,
+  metersToWorld,
+  mpsToWorldVelocityBaseStep,
+  worldToMeters,
+  worldVelocityStepToMps
+} from "@/lib/physics/units";
 import { cn } from "@/lib/utils/cn";
 import { createId } from "@/lib/utils/id";
 
@@ -36,6 +44,7 @@ type Interaction =
   | { kind: "none" }
   | { kind: "pan"; pointerId: number; startX: number; startY: number; startCameraX: number; startCameraY: number }
   | { kind: "draw"; pointerId: number; tool: ToolId; startWorld: WorldPoint; currentWorld: WorldPoint }
+  | { kind: "set_velocity"; pointerId: number; bodyMetaId: string; currentWorld: WorldPoint }
   | { kind: "measure_ruler"; pointerId: number; startWorld: WorldPoint; currentWorld: WorldPoint }
   | {
       kind: "measure_protractor";
@@ -126,11 +135,17 @@ export function SimulationCanvas() {
     isRunning,
     timeScale,
     gravity,
+    setGravity,
     tool,
     setTool,
     showCollisionPoints,
     showVelocityVectors,
     showTrails,
+    setShowTrails,
+    setShowGraphs,
+    showFbd,
+    fbdAxesMode,
+    setFbdReadout,
     snapEnabled,
     snapStepMeters,
     fields,
@@ -142,6 +157,7 @@ export function SimulationCanvas() {
     commitWorldAdd,
     commitFieldAdd,
     commitFieldChange,
+    consumePendingLabId,
     selectBody,
     setSelectedBodies,
     selectField,
@@ -153,6 +169,11 @@ export function SimulationCanvas() {
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const collisionsRef = useRef<CollisionMark[]>([]);
   const forceByBodyIdRef = useRef<Map<string, number>>(new Map());
+  const netForceByBodyIdRef = useRef<Map<string, { fx: number; fy: number }>>(new Map());
+  const emForceByBodyIdRef = useRef<
+    Map<string, { coulomb: { x: number; y: number }; electric: { x: number; y: number }; magnetic: { x: number; y: number }; total: { x: number; y: number } }>
+  >(new Map());
+  const contactNormalSumByBodyIdRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const trailsRef = useRef<Map<string, WorldPoint[]>>(new Map());
   const measurementRef = useRef<Measurement | null>(null);
   const interactionRef = useRef<Interaction>({ kind: "none" });
@@ -163,6 +184,7 @@ export function SimulationCanvas() {
   const hoveredBodyIdRef = useRef<string | null>(hoveredBodyId);
   const lastPointerScreenRef = useRef<{ x: number; y: number } | null>(null);
   const lastHoverUpdateRef = useRef(0);
+  const lastFbdUpdateRef = useRef(0);
 
   useEffect(() => {
     fieldsRef.current = fields;
@@ -183,6 +205,10 @@ export function SimulationCanvas() {
   useEffect(() => {
     if (!showTrails) trailsRef.current.clear();
   }, [showTrails]);
+
+  useEffect(() => {
+    if (!showFbd) setFbdReadout(null);
+  }, [setFbdReadout, showFbd]);
 
   useEffect(() => {
     if (tool !== "ruler" && tool !== "protractor") measurementRef.current = null;
@@ -212,6 +238,8 @@ export function SimulationCanvas() {
     showCollisionPoints,
     showVelocityVectors,
     showTrails,
+    showFbd,
+    fbdAxesMode,
     snapEnabled,
     snapStepMeters
   });
@@ -225,10 +253,12 @@ export function SimulationCanvas() {
       showCollisionPoints,
       showVelocityVectors,
       showTrails,
+      showFbd,
+      fbdAxesMode,
       snapEnabled,
       snapStepMeters
     };
-  }, [gravity, isRunning, showCollisionPoints, showTrails, showVelocityVectors, snapEnabled, snapStepMeters, timeScale, tool]);
+  }, [fbdAxesMode, gravity, isRunning, showCollisionPoints, showFbd, showTrails, showVelocityVectors, snapEnabled, snapStepMeters, timeScale, tool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -237,13 +267,33 @@ export function SimulationCanvas() {
     if (!ctx) return;
 
     const engine = Matter.Engine.create();
-    engine.gravity.scale = 0.001;
+    // Calibrated so `gravity` slider maps to m/s² under `PX_PER_METER`.
+    engine.gravity.scale = (9.8 * PX_PER_METER) / 1_000_000;
     engineRef.current = engine;
 
     collisionsRef.current = [];
     cameraRef.current = { x: 0, y: 0, zoom: 1 };
     interactionRef.current = { kind: "none" };
     lastPointerWorldRef.current = null;
+
+    // Guided labs: optional scene injection after reset.
+    const pendingLabId = consumePendingLabId();
+    if (pendingLabId) {
+      const scene = buildLabScene(pendingLabId as LabId);
+      if (scene.recommended?.gravity !== undefined) setGravity(scene.recommended.gravity);
+      if (scene.recommended?.showTrails !== undefined) setShowTrails(scene.recommended.showTrails);
+      if (scene.recommended?.showGraphs !== undefined) setShowGraphs(scene.recommended.showGraphs);
+      if (scene.recommended?.tool) setTool(scene.recommended.tool);
+
+      if (scene.camera) cameraRef.current = { ...scene.camera };
+      if (scene.bodies.length) Matter.World.add(engine.world, scene.bodies);
+      if (scene.constraints.length) Matter.World.add(engine.world, scene.constraints);
+      if (scene.fields.length) {
+        setFields(scene.fields);
+        fieldsRef.current = scene.fields;
+      }
+      if (scene.selectBodyId) selectBody(scene.selectBodyId);
+    }
     const onCollisionStart = (evt: Matter.IEventCollision<Matter.Engine>) => {
       const now = performance.now();
       for (const pair of evt.pairs) {
@@ -255,6 +305,30 @@ export function SimulationCanvas() {
       }
     };
     Matter.Events.on(engine, "collisionStart", onCollisionStart);
+
+    const onCollisionActive = (evt: Matter.IEventCollision<Matter.Engine>) => {
+      const sum = contactNormalSumByBodyIdRef.current;
+      for (const pair of evt.pairs) {
+        const n = pair.collision.normal as { x: number; y: number } | null | undefined;
+        if (!n) continue;
+        if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) continue;
+        const aId = getBodyMeta(pair.bodyA)?.id ?? null;
+        const bId = getBodyMeta(pair.bodyB)?.id ?? null;
+        if (aId) {
+          const prev = sum.get(aId) ?? { x: 0, y: 0 };
+          prev.x -= n.x;
+          prev.y -= n.y;
+          sum.set(aId, prev);
+        }
+        if (bId) {
+          const prev = sum.get(bId) ?? { x: 0, y: 0 };
+          prev.x += n.x;
+          prev.y += n.y;
+          sum.set(bId, prev);
+        }
+      }
+    };
+    Matter.Events.on(engine, "collisionActive", onCollisionActive);
 
     let raf = 0;
     let last = performance.now();
@@ -290,11 +364,30 @@ export function SimulationCanvas() {
             metaId
           });
         }
-        applyElectromagnetism(engine, fieldsRef.current);
+        contactNormalSumByBodyIdRef.current.clear();
+        const emWorld = applyElectromagnetism(engine, fieldsRef.current);
+        if (emWorld.size > 0) {
+          const toN = 1_000_000 / PX_PER_METER;
+          const emOut = emForceByBodyIdRef.current;
+          emOut.clear();
+          for (const [bodyNumericId, br] of emWorld.entries()) {
+            const metaId = preVelById.get(bodyNumericId)?.metaId ?? null;
+            if (!metaId) continue;
+            emOut.set(metaId, {
+              coulomb: { x: br.coulomb.x * toN, y: br.coulomb.y * toN },
+              electric: { x: br.electric.x * toN, y: br.electric.y * toN },
+              magnetic: { x: br.magnetic.x * toN, y: br.magnetic.y * toN },
+              total: { x: br.total.x * toN, y: br.total.y * toN }
+            });
+          }
+        } else {
+          emForceByBodyIdRef.current.clear();
+        }
         applyConveyorBelts(engine);
         Matter.Engine.update(engine, stepDt);
         if (Number.isFinite(stepDt) && stepDt > 0) {
           const forceById = forceByBodyIdRef.current;
+          const forceVecById = netForceByBodyIdRef.current;
           const bodiesAfter = Matter.Composite.allBodies(engine.world);
           const seen = new Set<string>();
           for (const b of bodiesAfter) {
@@ -315,12 +408,19 @@ export function SimulationCanvas() {
             const currVyMps = worldVelocityStepToMps(b.velocity.y, currDt);
             const ax = (currVxMps - prevVxMps) / dtSeconds;
             const ay = (currVyMps - prevVyMps) / dtSeconds;
-            const f = b.mass * Math.hypot(ax, ay);
-            if (Number.isFinite(f)) forceById.set(metaId, f);
+            const fx = b.mass * ax;
+            const fy = b.mass * ay;
+            if (Number.isFinite(fx) && Number.isFinite(fy)) {
+              forceVecById.set(metaId, { fx, fy });
+              forceById.set(metaId, Math.hypot(fx, fy));
+            }
             seen.add(metaId);
           }
           for (const key of Array.from(forceById.keys())) {
             if (!seen.has(key)) forceById.delete(key);
+          }
+          for (const key of Array.from(forceVecById.keys())) {
+            if (!seen.has(key)) forceVecById.delete(key);
           }
         }
 
@@ -377,6 +477,74 @@ export function SimulationCanvas() {
               });
             }
             lastHoverUpdateRef.current = now;
+          }
+        }
+      }
+
+      // Free-body readout (throttled)
+      if (settings.showFbd) {
+        const selectedEntity = selectedRef.current;
+        const selectedBodyIdForFbd = selectedEntity.kind === "body" ? selectedEntity.id : null;
+        if (!selectedBodyIdForFbd) {
+          if (now - lastFbdUpdateRef.current > 150) {
+            setFbdReadout(null);
+            lastFbdUpdateRef.current = now;
+          }
+        } else if (now - lastFbdUpdateRef.current > 120) {
+          const body = findBodyByMetaId(engine, selectedBodyIdForFbd);
+          if (!body || body.isStatic || !Number.isFinite(body.mass) || body.mass <= 0) {
+            setFbdReadout(null);
+            lastFbdUpdateRef.current = now;
+          } else {
+            const net = netForceByBodyIdRef.current.get(selectedBodyIdForFbd) ?? { fx: 0, fy: 0 };
+            const gravityF = { x: 0, y: body.mass * settings.gravity };
+
+            const em = emForceByBodyIdRef.current.get(selectedBodyIdForFbd) ?? {
+              coulomb: { x: 0, y: 0 },
+              electric: { x: 0, y: 0 },
+              magnetic: { x: 0, y: 0 },
+              total: { x: 0, y: 0 }
+            };
+
+            const contact = {
+              x: net.fx - gravityF.x - em.total.x,
+              y: net.fy - gravityF.y - em.total.y
+            };
+
+            const nSum = contactNormalSumByBodyIdRef.current.get(selectedBodyIdForFbd) ?? null;
+            let nHat: { x: number; y: number } | null = null;
+            let tHat: { x: number; y: number } | null = null;
+            if (nSum) {
+              const nLen = Math.hypot(nSum.x, nSum.y);
+              if (nLen > 1e-6) {
+                nHat = { x: nSum.x / nLen, y: nSum.y / nLen };
+                tHat = { x: -nHat.y, y: nHat.x };
+              }
+            }
+
+            let normal = { x: 0, y: 0 };
+            let friction = { x: contact.x, y: contact.y };
+            if (nHat) {
+              const normalMag = Math.max(0, contact.x * nHat.x + contact.y * nHat.y);
+              normal = { x: nHat.x * normalMag, y: nHat.y * normalMag };
+              friction = { x: contact.x - normal.x, y: contact.y - normal.y };
+            }
+
+            setFbdReadout({
+              bodyId: selectedBodyIdForFbd,
+              net: { x: net.fx, y: net.fy },
+              gravity: gravityF,
+              coulomb: em.coulomb,
+              electric: em.electric,
+              magnetic: em.magnetic,
+              em: em.total,
+              contact,
+              normal,
+              friction,
+              normalAxis: nHat,
+              tangentAxis: tHat
+            });
+            lastFbdUpdateRef.current = now;
           }
         }
       }
@@ -634,6 +802,78 @@ export function SimulationCanvas() {
         ctx.stroke();
       }
 
+      // Free-body diagram overlay (selected body)
+      if (settings.showFbd && selectedBodyId) {
+        const body = findBodyByMetaId(engine, selectedBodyId);
+        if (body && !body.isStatic && Number.isFinite(body.mass) && body.mass > 0) {
+          const origin = body.position;
+          const net = netForceByBodyIdRef.current.get(selectedBodyId) ?? { fx: 0, fy: 0 };
+          const gravityF = { x: 0, y: body.mass * settings.gravity };
+          const em = emForceByBodyIdRef.current.get(selectedBodyId) ?? {
+            coulomb: { x: 0, y: 0 },
+            electric: { x: 0, y: 0 },
+            magnetic: { x: 0, y: 0 },
+            total: { x: 0, y: 0 }
+          };
+          const contact = {
+            x: net.fx - gravityF.x - em.total.x,
+            y: net.fy - gravityF.y - em.total.y
+          };
+
+          const nSum = contactNormalSumByBodyIdRef.current.get(selectedBodyId) ?? null;
+          let nHat: { x: number; y: number } | null = null;
+          if (nSum) {
+            const nLen = Math.hypot(nSum.x, nSum.y);
+            if (nLen > 1e-6) nHat = { x: nSum.x / nLen, y: nSum.y / nLen };
+          }
+
+          let normal = { x: 0, y: 0 };
+          let friction = { x: contact.x, y: contact.y };
+          if (nHat) {
+            const normalMag = Math.max(0, contact.x * nHat.x + contact.y * nHat.y);
+            normal = { x: nHat.x * normalMag, y: nHat.y * normalMag };
+            friction = { x: contact.x - normal.x, y: contact.y - normal.y };
+          }
+
+          const pxPerN = 8 / camera.zoom;
+          const maxLen = 220 / camera.zoom;
+          const minLen = 12 / camera.zoom;
+          const head = 8 / camera.zoom;
+
+          const drawForce = (v: { x: number; y: number }, color: string, width: number) => {
+            const m = Math.hypot(v.x, v.y);
+            if (!Number.isFinite(m) || m < 1e-6) return;
+            const len = Math.min(maxLen, Math.max(minLen, m * pxPerN));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width / camera.zoom;
+            drawArrow(ctx, origin.x, origin.y, v.x, v.y, len, head);
+          };
+
+          // Axes
+          if (settings.fbdAxesMode === "world") {
+            ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+            ctx.lineWidth = 1.25 / camera.zoom;
+            drawArrow(ctx, origin.x, origin.y, 1, 0, 70 / camera.zoom, 6 / camera.zoom);
+            drawArrow(ctx, origin.x, origin.y, 0, 1, 70 / camera.zoom, 6 / camera.zoom);
+          } else if (nHat) {
+            const tHat = { x: -nHat.y, y: nHat.x };
+            ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+            ctx.lineWidth = 1.25 / camera.zoom;
+            drawArrow(ctx, origin.x, origin.y, nHat.x, nHat.y, 70 / camera.zoom, 6 / camera.zoom);
+            drawArrow(ctx, origin.x, origin.y, tHat.x, tHat.y, 70 / camera.zoom, 6 / camera.zoom);
+          }
+
+          // Forces
+          drawForce({ x: em.coulomb.x, y: em.coulomb.y }, "rgba(236, 72, 153, 0.85)", 2);
+          drawForce({ x: em.electric.x, y: em.electric.y }, "rgba(56, 189, 248, 0.85)", 2);
+          drawForce({ x: em.magnetic.x, y: em.magnetic.y }, "rgba(168, 85, 247, 0.85)", 2);
+          drawForce(gravityF, "rgba(34, 197, 94, 0.85)", 2);
+          drawForce(normal, "rgba(226, 232, 240, 0.75)", 2);
+          drawForce(friction, "rgba(251, 146, 60, 0.85)", 2);
+          drawForce({ x: net.fx, y: net.fy }, "rgba(250, 204, 21, 0.9)", 2.75);
+        }
+      }
+
       const pointerWorld = lastPointerWorldRef.current;
       const interaction = interactionRef.current;
 
@@ -654,6 +894,38 @@ export function SimulationCanvas() {
         ctx.fill();
         ctx.stroke();
         ctx.setLineDash([]);
+      }
+
+      // Velocity tool overlay
+      if (interaction.kind === "set_velocity") {
+        const body = findBodyByMetaId(engine, interaction.bodyMetaId);
+        if (body) {
+          const origin = body.position;
+          const tip = interaction.currentWorld;
+          const dx = tip.x - origin.x;
+          const dy = tip.y - origin.y;
+          const len = Math.hypot(dx, dy);
+          if (len > 2) {
+            ctx.strokeStyle = "rgba(56, 189, 248, 0.9)";
+            ctx.lineWidth = 2 / camera.zoom;
+            drawArrow(ctx, origin.x, origin.y, dx, dy, len, 8 / camera.zoom);
+
+            const vx = worldToMeters(dx);
+            const vy = worldToMeters(dy);
+            const speed = Math.hypot(vx, vy);
+            const label = `v₀ = (${vx.toFixed(2)}, ${vy.toFixed(2)}) m/s   |v₀| = ${speed.toFixed(2)} m/s`;
+            ctx.font = `${12 / camera.zoom}px ui-sans-serif, system-ui, -apple-system`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.strokeStyle = "rgba(2, 6, 23, 0.9)";
+            ctx.lineWidth = 4 / camera.zoom;
+            const lx = origin.x + dx * 0.5;
+            const ly = origin.y + dy * 0.5;
+            ctx.strokeText(label, lx, ly - 10 / camera.zoom);
+            ctx.fillStyle = "rgba(226, 232, 240, 0.95)";
+            ctx.fillText(label, lx, ly - 10 / camera.zoom);
+          }
+        }
       }
 
       // Selection handles (single body)
@@ -965,10 +1237,25 @@ export function SimulationCanvas() {
     return () => {
       window.cancelAnimationFrame(raf);
       Matter.Events.off(engine, "collisionStart", onCollisionStart);
+      Matter.Events.off(engine, "collisionActive", onCollisionActive);
       Matter.Engine.clear(engine);
       engineRef.current = null;
     };
-  }, [engineRef, resetNonce, setHoverReadout, setHoveredBodyId, stepRequestedRef]);
+  }, [
+    consumePendingLabId,
+    engineRef,
+    resetNonce,
+    selectBody,
+    setFields,
+    setGravity,
+    setFbdReadout,
+    setHoverReadout,
+    setHoveredBodyId,
+    setShowGraphs,
+    setShowTrails,
+    setTool,
+    stepRequestedRef
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1061,6 +1348,16 @@ export function SimulationCanvas() {
                 currentWorld: p
               };
             }
+            canvas.setPointerCapture(e.pointerId);
+            return;
+          }
+
+          if (tool === "velocity") {
+            const body = queryBodyAtPoint(engine, world);
+            if (!body) return;
+            const meta = ensureBodyMeta(body, { label: body.label || "Body" });
+            selectBody(meta.id);
+            interactionRef.current = { kind: "set_velocity", pointerId: e.pointerId, bodyMetaId: meta.id, currentWorld: snapWorld(world) };
             canvas.setPointerCapture(e.pointerId);
             return;
           }
@@ -1349,6 +1646,10 @@ export function SimulationCanvas() {
             }
             return;
           }
+          if (interaction.kind === "set_velocity" && interaction.pointerId === e.pointerId) {
+            interactionRef.current = { ...interaction, currentWorld: snapWorld(world) };
+            return;
+          }
           if (interaction.kind === "draw" && interaction.pointerId === e.pointerId) {
             interactionRef.current = { ...interaction, currentWorld: snapWorld(world) };
             return;
@@ -1559,6 +1860,24 @@ export function SimulationCanvas() {
               measurementRef.current = { kind: "protractor", vertex: interaction.vertexWorld, a: p, b: null };
             } else {
               measurementRef.current = { kind: "protractor", vertex: interaction.vertexWorld, a: interaction.ray1World, b: p };
+            }
+            interactionRef.current = { kind: "none" };
+            canvas.releasePointerCapture(e.pointerId);
+            return;
+          }
+
+          if (interaction.kind === "set_velocity" && interaction.pointerId === e.pointerId) {
+            const body = findBodyByMetaId(engine, interaction.bodyMetaId);
+            if (body) {
+              const origin = body.position;
+              const dxMps = worldToMeters(interaction.currentWorld.x - origin.x);
+              const dyMps = worldToMeters(interaction.currentWorld.y - origin.y);
+              const speed = Math.hypot(dxMps, dyMps);
+              const max = 25;
+              const scale = speed > max && speed > 0 ? max / speed : 1;
+              const vx = dxMps * scale;
+              const vy = dyMps * scale;
+              Matter.Body.setVelocity(body, { x: mpsToWorldVelocityBaseStep(vx), y: mpsToWorldVelocityBaseStep(vy) });
             }
             interactionRef.current = { kind: "none" };
             canvas.releasePointerCapture(e.pointerId);

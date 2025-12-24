@@ -4,6 +4,8 @@ import { I18nProvider } from "@/components/i18n/I18nProvider";
 import { KeyboardShortcuts } from "@/components/sandbox/KeyboardShortcuts";
 import { Sidebar } from "@/components/sandbox/Sidebar";
 import { HoverTooltip } from "@/components/sandbox/overlays/HoverTooltip";
+import { FbdPanel } from "@/components/sandbox/overlays/FbdPanel";
+import { LabsPanel } from "@/components/sandbox/overlays/LabsPanel";
 import { GraphsPanel } from "@/components/sandbox/overlays/GraphsPanel";
 import { InspectorPanel } from "@/components/sandbox/overlays/InspectorPanel";
 import { TopControls } from "@/components/sandbox/overlays/TopControls";
@@ -20,7 +22,9 @@ export default function PhysicsSandbox() {
           <div className="relative flex-1 overflow-hidden">
             <SimulationCanvas />
             <TopControls />
+            <LabsPanel />
             <GraphsPanel />
+            <FbdPanel />
             <InspectorPanel />
             <HoverTooltip />
           </div>
