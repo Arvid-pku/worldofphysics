@@ -211,7 +211,12 @@ export const en = {
   "constraint.kind.rigid_rope": "Rigid Rope (tension-only)",
   "constraint.length": "Length",
   "constraint.stiffness": "Stiffness",
-  "constraint.damping": "Damping"
+  "constraint.damping": "Damping",
+  "constraint.mode": "Mode",
+  "constraint.mode.distance": "Distance",
+  "constraint.mode.axis": "Directional (axis)",
+  "constraint.axisDirection": "Axis direction",
+  "constraint.guide": "Guide (prevent tipping)"
 } as const;
 
 export const zh = {
@@ -427,7 +432,12 @@ export const zh = {
   "constraint.kind.rigid_rope": "刚性绳（只拉不推）",
   "constraint.length": "长度",
   "constraint.stiffness": "刚度",
-  "constraint.damping": "阻尼"
+  "constraint.damping": "阻尼",
+  "constraint.mode": "模式",
+  "constraint.mode.distance": "距离约束",
+  "constraint.mode.axis": "定向（沿轴）",
+  "constraint.axisDirection": "轴方向",
+  "constraint.guide": "导向（防侧翻）"
 } as const satisfies Record<keyof typeof en, string>;
 
 export const DICT = { en, zh } as const;

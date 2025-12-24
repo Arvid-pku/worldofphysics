@@ -6,7 +6,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureConstraintMeta, findConstraintByMetaId } from "@/lib/physics/constraintMeta";
 import { captureConstraintState, type ConstraintState } from "@/lib/physics/constraintState";
-import type { ConstraintKind } from "@/lib/physics/types";
+import type { ConstraintKind, ConstraintMode } from "@/lib/physics/types";
 import { metersToWorld, worldToMeters } from "@/lib/physics/units";
 
 function parseNum(value: string) {
@@ -112,6 +112,9 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
   }, [constraintId, engineRef]);
 
   const [kind, setKind] = useState<ConstraintKind>("rod");
+  const [mode, setMode] = useState<ConstraintMode>("distance");
+  const [axisDeg, setAxisDeg] = useState("0");
+  const [guide, setGuide] = useState(true);
   const [lengthM, setLengthM] = useState("0");
   const [stiffness, setStiffness] = useState(1);
   const [damping, setDamping] = useState(0);
@@ -135,10 +138,15 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
     if (!constraint) return;
     const meta = ensureConstraintMeta(constraint);
     setKind(meta.kind);
+    setMode(meta.mode ?? "distance");
+    setAxisDeg(fmt((((meta.axisAngleRad ?? 0) * 180) / Math.PI) % 360, 1));
+    setGuide(meta.guide ?? true);
     setLengthM(fmt(worldToMeters(meta.restLength), 3));
     setStiffness(meta.stiffness);
     setDamping(meta.damping);
   }, [constraint, constraintId]);
+
+  const axisSpring = kind === "spring" && mode === "axis";
 
   const applyLength = (valueM: string) => {
     if (!constraint) return;
@@ -155,7 +163,7 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
     const v = Math.min(1, Math.max(0, value));
     const meta = ensureConstraintMeta(constraint);
     meta.stiffness = v;
-    constraint.stiffness = v;
+    if (!axisSpring) constraint.stiffness = v;
     setStiffness(v);
   };
 
@@ -164,8 +172,50 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
     const v = Math.min(1, Math.max(0, value));
     const meta = ensureConstraintMeta(constraint);
     meta.damping = v;
-    constraint.damping = v;
+    if (!axisSpring) constraint.damping = v;
     setDamping(v);
+  };
+
+  const applyMode = (nextMode: ConstraintMode) => {
+    if (!constraint) return;
+    const meta = ensureConstraintMeta(constraint);
+    meta.mode = nextMode;
+    setMode(nextMode);
+    if (kind === "spring" && nextMode === "axis") {
+      meta.guide = meta.guide ?? true;
+      setGuide(meta.guide);
+      const a = constraint.bodyA ? { x: constraint.bodyA.position.x + (constraint.pointA?.x ?? 0), y: constraint.bodyA.position.y + (constraint.pointA?.y ?? 0) } : constraint.pointA;
+      const b = constraint.bodyB ? { x: constraint.bodyB.position.x + (constraint.pointB?.x ?? 0), y: constraint.bodyB.position.y + (constraint.pointB?.y ?? 0) } : constraint.pointB;
+      if (a && b) {
+        const angle = Math.atan2(a.y - b.y, a.x - b.x);
+        meta.axisAngleRad = angle;
+        setAxisDeg(fmt(((angle * 180) / Math.PI) % 360, 1));
+        meta.restLength = Math.hypot(a.x - b.x, a.y - b.y);
+        constraint.length = meta.restLength;
+      }
+      constraint.stiffness = 0;
+      constraint.damping = 0;
+    } else {
+      constraint.stiffness = meta.stiffness;
+      constraint.damping = meta.damping;
+      constraint.length = meta.restLength;
+    }
+  };
+
+  const applyAxisDeg = (degStr: string) => {
+    if (!constraint) return;
+    const deg = parseNum(degStr);
+    if (deg === null) return;
+    const rad = (deg * Math.PI) / 180;
+    const meta = ensureConstraintMeta(constraint);
+    meta.axisAngleRad = rad;
+  };
+
+  const applyGuide = (value: boolean) => {
+    if (!constraint) return;
+    const meta = ensureConstraintMeta(constraint);
+    meta.guide = value;
+    setGuide(value);
   };
 
   if (!constraint) {
@@ -186,6 +236,57 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
               <span className="text-slate-200">{t(`constraint.kind.${kind}`)}</span>
             </div>
           </div>
+
+          {kind === "spring" ? (
+            <div className="grid gap-3">
+              <label className="grid gap-1">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>{t("constraint.mode")}</span>
+                </div>
+                <select
+                  value={mode}
+                  onChange={(e) => {
+                    beginEdit();
+                    applyMode(e.target.value as ConstraintMode);
+                    commitEdit();
+                  }}
+                  className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
+                >
+                  <option value="distance">{t("constraint.mode.distance")}</option>
+                  <option value="axis">{t("constraint.mode.axis")}</option>
+                </select>
+              </label>
+
+              {mode === "axis" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <LabeledNumber
+                    label={t("constraint.axisDirection")}
+                    unit="°"
+                    value={axisDeg}
+                    onChange={setAxisDeg}
+                    onFocus={beginEdit}
+                    onBlur={() => {
+                      applyAxisDeg(axisDeg);
+                      commitEdit();
+                    }}
+                  />
+                  <label className="flex items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2">
+                    <span className="text-xs text-slate-300">{t("constraint.guide")}</span>
+                    <input
+                      type="checkbox"
+                      checked={guide}
+                      onChange={(e) => {
+                        beginEdit();
+                        applyGuide(e.target.checked);
+                        commitEdit();
+                      }}
+                      className="h-4 w-4 accent-blue-500"
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledNumber
@@ -236,4 +337,3 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
     </div>
   );
 }
-

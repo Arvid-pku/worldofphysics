@@ -25,13 +25,18 @@ export type RightPanelTab = "inspector" | "graphs" | "fbd";
 
 export type ConstraintKind = "rod" | "spring" | "rope" | "rigid_rope";
 
+export type ConstraintMode = "distance" | "axis";
+
 export type ConstraintMeta = {
   id: string;
   kind: ConstraintKind;
   label: string;
-  restLength: number; // world units (px), used as max length for ropes
+  restLength: number; // world units (px), used as max length for ropes and rest length for springs/rods
   stiffness: number; // 0..1
   damping: number; // 0..1
+  mode?: ConstraintMode; // default: "distance"
+  axisAngleRad?: number; // for `mode: "axis"` (fixed axis direction)
+  guide?: boolean; // for `mode: "axis"` (stabilize to axis)
 };
 
 export type FieldKind = "electric" | "magnetic";

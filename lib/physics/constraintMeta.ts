@@ -23,6 +23,7 @@ export function ensureConstraintMeta(constraint: Matter.Constraint, patch?: Part
   const damping = patch?.damping ?? constraint.damping ?? 0;
   const restLength = patch?.restLength ?? constraint.length ?? 0;
   const kind = patch?.kind ?? ("rod" satisfies ConstraintKind);
+  const mode = patch?.mode ?? ("distance" satisfies ConstraintMeta["mode"]);
 
   const meta: ConstraintMeta = {
     id,
@@ -30,7 +31,10 @@ export function ensureConstraintMeta(constraint: Matter.Constraint, patch?: Part
     label: patch?.label ?? constraint.label ?? "Constraint",
     restLength,
     stiffness,
-    damping
+    damping,
+    mode,
+    axisAngleRad: patch?.axisAngleRad,
+    guide: patch?.guide
   };
 
   (constraint as any).plugin = { ...(((constraint as any).plugin as any) ?? {}), [META_KEY]: meta };
@@ -45,4 +49,3 @@ export function findConstraintByMetaId(engine: Matter.Engine, id: string): Matte
   }
   return null;
 }
-

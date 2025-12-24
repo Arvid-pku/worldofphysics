@@ -41,7 +41,8 @@ export function applyConstraintState(engine: Matter.Engine, constraint: Matter.C
   (constraint as any).angleA = Number.isFinite(state.angleA) ? state.angleA : bodyA?.angle ?? 0;
   (constraint as any).angleB = Number.isFinite(state.angleB) ? state.angleB : bodyB?.angle ?? 0;
 
-  constraint.stiffness = meta.stiffness;
-  constraint.damping = meta.damping;
+  const axisSpring = meta.kind === "spring" && meta.mode === "axis";
+  constraint.stiffness = axisSpring ? 0 : meta.stiffness;
+  constraint.damping = axisSpring ? 0 : meta.damping;
   constraint.length = meta.restLength;
 }
