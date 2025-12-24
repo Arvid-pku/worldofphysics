@@ -7,6 +7,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { normalizeAngleRad } from "@/lib/physics/fields";
 import type { FieldRegion } from "@/lib/physics/types";
+import { metersToWorld, worldToMeters } from "@/lib/physics/units";
 import { cn } from "@/lib/utils/cn";
 
 function clamp(v: number, min: number, max: number) {
@@ -29,18 +30,18 @@ function LabeledNumber({
   label,
   value,
   onChange,
-  hint
+  unit
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
-  hint?: string;
+  unit?: string;
 }) {
   return (
     <label className="grid gap-1">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>{label}</span>
-        {hint ? <span className="text-[11px] text-slate-600">{hint}</span> : null}
+        {unit ? <span className="text-[11px] text-slate-600">{unit}</span> : null}
       </div>
       <input
         value={Number.isFinite(value) ? value : 0}
@@ -58,7 +59,8 @@ function LabeledSlider({
   min,
   max,
   step,
-  onChange
+  onChange,
+  unit
 }: {
   label: string;
   value: number;
@@ -66,12 +68,16 @@ function LabeledSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  unit?: string;
 }) {
   return (
     <div className="grid gap-1">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>{label}</span>
-        <span className="tabular-nums text-slate-300">{value.toFixed(2)}</span>
+        <span className="tabular-nums text-slate-300">
+          {value.toFixed(2)}
+          {unit ? ` ${unit}` : ""}
+        </span>
       </div>
       <input
         type="range"
@@ -147,20 +153,29 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
           <div className="grid grid-cols-2 gap-3">
             <LabeledNumber
               label={t("region.width")}
-              value={field.width ?? 0}
-              onChange={(v) => setFields((prev) => updateField(prev, { ...field, width: Math.max(40, v) }))}
+              unit="m"
+              value={worldToMeters(field.width ?? 0)}
+              onChange={(v) =>
+                setFields((prev) => updateField(prev, { ...field, width: Math.max(40, metersToWorld(v)) }))
+              }
             />
             <LabeledNumber
               label={t("region.height")}
-              value={field.height ?? 0}
-              onChange={(v) => setFields((prev) => updateField(prev, { ...field, height: Math.max(40, v) }))}
+              unit="m"
+              value={worldToMeters(field.height ?? 0)}
+              onChange={(v) =>
+                setFields((prev) => updateField(prev, { ...field, height: Math.max(40, metersToWorld(v)) }))
+              }
             />
           </div>
         ) : (
           <LabeledNumber
             label={t("region.radius")}
-            value={field.radius ?? 0}
-            onChange={(v) => setFields((prev) => updateField(prev, { ...field, radius: Math.max(24, v) }))}
+            unit="m"
+            value={worldToMeters(field.radius ?? 0)}
+            onChange={(v) =>
+              setFields((prev) => updateField(prev, { ...field, radius: Math.max(24, metersToWorld(v)) }))
+            }
           />
         )}
       </Section>
@@ -174,13 +189,14 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               min={-5}
               max={5}
               step={0.01}
+              unit="N/C"
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, magnitude: v }))}
             />
 
             <div className="grid grid-cols-2 gap-3">
               <LabeledNumber
                 label={t("field.direction")}
-                hint="θ"
+                unit="°"
                 value={angleDeg}
                 onChange={(v) => {
                   const clamped = clamp(v, -360, 360);
@@ -232,6 +248,7 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               min={-5}
               max={5}
               step={0.01}
+              unit="T"
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, strength: v }))}
             />
             <div className="text-[11px] text-slate-500">

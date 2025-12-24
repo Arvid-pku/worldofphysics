@@ -1,5 +1,7 @@
 import * as Matter from "matter-js";
 
+import { BASE_DELTA_MS, PX_PER_METER } from "@/lib/physics/units";
+
 export type ConveyorMeta = {
   enabled: boolean;
   speed: number; // m/s (conceptual)
@@ -34,9 +36,7 @@ export function ensureConveyorMeta(body: Matter.Body, patch?: Partial<ConveyorMe
   return meta;
 }
 
-const PX_PER_METER = 80;
-const BASE_DT = 1000 / 60;
-const SPEED_TO_VEL = (PX_PER_METER / 1000) * BASE_DT;
+const SPEED_TO_VEL = (PX_PER_METER / 1000) * BASE_DELTA_MS;
 
 export function applyConveyorBelts(engine: Matter.Engine) {
   const bodies = Matter.Composite.allBodies(engine.world);
@@ -74,4 +74,3 @@ export function applyConveyorBelts(engine: Matter.Engine) {
     }
   }
 }
-

@@ -10,6 +10,7 @@ import { applyConveyorBelts, ensureConveyorMeta, getConveyorMeta } from "@/lib/p
 import { applyElectromagnetism } from "@/lib/physics/em";
 import { isPointInField } from "@/lib/physics/fields";
 import type { FieldRegion, ToolId } from "@/lib/physics/types";
+import { BASE_DELTA_MS, worldVelocityStepToMps } from "@/lib/physics/units";
 import { cn } from "@/lib/utils/cn";
 import { createId } from "@/lib/utils/id";
 
@@ -50,6 +51,7 @@ export function SimulationCanvas() {
     timeScale,
     gravity,
     tool,
+    setTool,
     showCollisionPoints,
     showVelocityVectors,
     fields,
@@ -65,6 +67,7 @@ export function SimulationCanvas() {
 
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const collisionsRef = useRef<CollisionMark[]>([]);
+  const forceByBodyIdRef = useRef<Map<string, number>>(new Map());
   const interactionRef = useRef<Interaction>({ kind: "none" });
   const lastPointerWorldRef = useRef<WorldPoint | null>(null);
   const fieldsRef = useRef<FieldRegion[]>(fields);
@@ -156,9 +159,50 @@ export function SimulationCanvas() {
         const stepDt = settings.isRunning
           ? dt * settings.timeScale
           : (1000 / 60) * Math.max(settings.timeScale, 0.0001);
+        const preVelById = new Map<number, { vx: number; vy: number; dtMs: number; metaId: string | null }>();
+        const bodiesBefore = Matter.Composite.allBodies(engine.world);
+        for (const b of bodiesBefore) {
+          const metaId = getBodyMeta(b)?.id ?? null;
+          preVelById.set(b.id, {
+            vx: b.velocity.x,
+            vy: b.velocity.y,
+            dtMs: (b as any).deltaTime || BASE_DELTA_MS,
+            metaId
+          });
+        }
         applyElectromagnetism(engine, fieldsRef.current);
         applyConveyorBelts(engine);
         Matter.Engine.update(engine, stepDt);
+        if (Number.isFinite(stepDt) && stepDt > 0) {
+          const forceById = forceByBodyIdRef.current;
+          const bodiesAfter = Matter.Composite.allBodies(engine.world);
+          const seen = new Set<string>();
+          for (const b of bodiesAfter) {
+            if (b.isStatic) continue;
+            if (!Number.isFinite(b.mass) || b.mass <= 0) continue;
+            const pre = preVelById.get(b.id) ?? null;
+            const metaId = pre?.metaId ?? getBodyMeta(b)?.id ?? null;
+            if (!metaId) continue;
+            const prevDt = pre?.dtMs ?? BASE_DELTA_MS;
+            const currDt = (b as any).deltaTime || stepDt || BASE_DELTA_MS;
+            const dtSeconds = currDt / 1000;
+            if (!Number.isFinite(dtSeconds) || dtSeconds <= 1e-6) continue;
+            const prevVx = pre?.vx ?? b.velocity.x;
+            const prevVy = pre?.vy ?? b.velocity.y;
+            const prevVxMps = worldVelocityStepToMps(prevVx, prevDt);
+            const prevVyMps = worldVelocityStepToMps(prevVy, prevDt);
+            const currVxMps = worldVelocityStepToMps(b.velocity.x, currDt);
+            const currVyMps = worldVelocityStepToMps(b.velocity.y, currDt);
+            const ax = (currVxMps - prevVxMps) / dtSeconds;
+            const ay = (currVyMps - prevVyMps) / dtSeconds;
+            const f = b.mass * Math.hypot(ax, ay);
+            if (Number.isFinite(f)) forceById.set(metaId, f);
+            seen.add(metaId);
+          }
+          for (const key of Array.from(forceById.keys())) {
+            if (!seen.has(key)) forceById.delete(key);
+          }
+        }
         stepRequestedRef.current = false;
       }
 
@@ -174,12 +218,15 @@ export function SimulationCanvas() {
               setHoveredBodyId(null);
               setHoverReadout(null);
             } else {
-              const v = Math.hypot(body.velocity.x, body.velocity.y);
+              const dtMs = (body as any).deltaTime || engine.timing.lastDelta || BASE_DELTA_MS;
+              const v = worldVelocityStepToMps(Math.hypot(body.velocity.x, body.velocity.y), dtMs);
               const ke = 0.5 * body.mass * v * v;
+              const f = forceByBodyIdRef.current.get(hoveredId) ?? 0;
               setHoverReadout({
                 screenX: pointerScreen.x,
                 screenY: pointerScreen.y,
                 velocity: v,
+                force: f,
                 kineticEnergy: ke
               });
             }
@@ -675,10 +722,12 @@ export function SimulationCanvas() {
             return;
           }
           const meta = ensureBodyMeta(body, { label: body.label || "Body" });
-          const v = Math.hypot(body.velocity.x, body.velocity.y);
+          const dtMs = (body as any).deltaTime || engine.timing.lastDelta || BASE_DELTA_MS;
+          const v = worldVelocityStepToMps(Math.hypot(body.velocity.x, body.velocity.y), dtMs);
           const ke = 0.5 * body.mass * v * v;
+	          const f = forceByBodyIdRef.current.get(meta.id) ?? 0;
           setHoveredBodyId(meta.id);
-          setHoverReadout({ screenX: x, screenY: y, velocity: v, kineticEnergy: ke });
+          setHoverReadout({ screenX: x, screenY: y, velocity: v, force: f, kineticEnergy: ke });
         }}
         onPointerUp={(e) => {
           const canvas = canvasRef.current;
@@ -751,39 +800,42 @@ export function SimulationCanvas() {
             canvas.releasePointerCapture(e.pointerId);
             return;
           }
-          if (interaction.kind === "drag" && interaction.pointerId === e.pointerId) {
-            Matter.World.remove(engine.world, interaction.dragConstraint);
-            interactionRef.current = { kind: "none" };
-            canvas.releasePointerCapture(e.pointerId);
-            return;
-          }
-          if (interaction.kind === "draw" && interaction.pointerId === e.pointerId) {
-            const selectionBefore = selected;
-            const field = createFieldFromDraw(interaction);
-            if (field) {
-              commitFieldAdd({
-                field,
-                selectionBefore,
-                selectionAfter: { kind: "field", id: field.id }
-              });
-              interactionRef.current = { kind: "none" };
-              canvas.releasePointerCapture(e.pointerId);
-              return;
-            }
+	          if (interaction.kind === "drag" && interaction.pointerId === e.pointerId) {
+	            Matter.World.remove(engine.world, interaction.dragConstraint);
+	            interactionRef.current = { kind: "none" };
+	            canvas.releasePointerCapture(e.pointerId);
+	            return;
+	          }
+	          if (interaction.kind === "draw" && interaction.pointerId === e.pointerId) {
+	            const toolAtDrawStart = interaction.tool;
+	            const selectionBefore = selected;
+	            const field = createFieldFromDraw(interaction);
+	            if (field) {
+	              commitFieldAdd({
+	                field,
+	                selectionBefore,
+	                selectionAfter: { kind: "field", id: field.id }
+	              });
+	              interactionRef.current = { kind: "none" };
+	              canvas.releasePointerCapture(e.pointerId);
+	              setTool(toolAtDrawStart);
+	              return;
+	            }
 
-            const created = finalizeDraw(interaction);
-            interactionRef.current = { kind: "none" };
-            canvas.releasePointerCapture(e.pointerId);
-            if (created?.selectedId) {
-              commitWorldAdd({
-                bodies: created.bodies,
-                constraints: created.constraints,
-                selectionBefore,
-                selectionAfter: { kind: "body", id: created.selectedId }
-              });
-            }
-          }
-        }}
+	            const created = finalizeDraw(interaction);
+	            interactionRef.current = { kind: "none" };
+	            canvas.releasePointerCapture(e.pointerId);
+	            if (created?.selectedId) {
+	              commitWorldAdd({
+	                bodies: created.bodies,
+	                constraints: created.constraints,
+	                selectionBefore,
+	                selectionAfter: { kind: "body", id: created.selectedId }
+	              });
+	            }
+	            setTool(toolAtDrawStart);
+	          }
+	        }}
         onPointerLeave={() => {
           setHoveredBodyId(null);
           setHoverReadout(null);
@@ -866,7 +918,8 @@ function addRopeChain(a: Matter.Body, b: Matter.Body) {
       collisionFilter: { group },
       restitution: 0.1,
       friction: 0.2,
-      frictionStatic: 0.4
+      frictionStatic: 0.4,
+      frictionAir: 0
     });
     ensureBodyMeta(part, { label: "Rope Segment" });
     setBodyShape(part, { kind: "circle", radius });
@@ -912,7 +965,8 @@ function addRopeChainToPoint(a: Matter.Body, endPoint: WorldPoint) {
       collisionFilter: { group },
       restitution: 0.1,
       friction: 0.2,
-      frictionStatic: 0.4
+      frictionStatic: 0.4,
+      frictionAir: 0
     });
     ensureBodyMeta(part, { label: "Rope Segment" });
     setBodyShape(part, { kind: "circle", radius });
@@ -973,7 +1027,8 @@ function finalizeDraw(
   const opts: Matter.IBodyDefinition = {
     restitution: 0.25,
     friction: 0.12,
-    frictionStatic: 0.5
+    frictionStatic: 0.5,
+    frictionAir: 0
   };
 
   if (tool === "circle") {

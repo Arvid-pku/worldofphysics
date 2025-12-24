@@ -20,11 +20,15 @@ export function HoverTooltip() {
     >
       <div className="flex items-center justify-between">
         <span className="text-slate-400">{t("hover.velocity")}</span>
-        <span className="tabular-nums">{hoverReadout.velocity.toFixed(2)}</span>
+        <span className="tabular-nums">{hoverReadout.velocity.toFixed(2)} m/s</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-slate-400">{t("hover.force")}</span>
+        <span className="tabular-nums">{hoverReadout.force.toFixed(2)} N</span>
       </div>
       <div className="mt-1 flex items-center justify-between">
         <span className="text-slate-400">{t("hover.kineticEnergy")}</span>
-        <span className="tabular-nums">{hoverReadout.kineticEnergy.toFixed(2)}</span>
+        <span className="tabular-nums">{hoverReadout.kineticEnergy.toFixed(2)} J</span>
       </div>
     </div>
   );

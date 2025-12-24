@@ -9,6 +9,13 @@ import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureBodyMeta, findBodyByMetaId } from "@/lib/physics/bodyMeta";
 import { ensureConveyorMeta, getConveyorMeta, setConveyorMeta } from "@/lib/physics/conveyor";
 import type { ChargeDistribution } from "@/lib/physics/types";
+import {
+  BASE_DELTA_MS,
+  mpsToWorldVelocityBaseStep,
+  radpsToWorldAngularVelocityBaseStep,
+  worldAngularVelocityStepToRadps,
+  worldVelocityStepToMps
+} from "@/lib/physics/units";
 import { cn } from "@/lib/utils/cn";
 
 type TriadKey = "mass" | "density" | "volume";
@@ -63,18 +70,18 @@ function LabeledNumber({
   label,
   value,
   onChange,
-  hint
+  unit
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  hint?: string;
+  unit?: string;
 }) {
   return (
     <label className="grid gap-1">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>{label}</span>
-        {hint ? <span className="text-[11px] text-slate-600">{hint}</span> : null}
+        {unit ? <span className="text-[11px] text-slate-600">{unit}</span> : null}
       </div>
       <input
         value={value}
@@ -92,7 +99,8 @@ function LabeledSlider({
   min,
   max,
   step,
-  onChange
+  onChange,
+  unit
 }: {
   label: string;
   value: number;
@@ -100,12 +108,16 @@ function LabeledSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  unit?: string;
 }) {
   return (
     <div className="grid gap-1">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>{label}</span>
-        <span className="tabular-nums text-slate-300">{value.toFixed(2)}</span>
+        <span className="tabular-nums text-slate-300">
+          {value.toFixed(2)}
+          {unit ? ` ${unit}` : ""}
+        </span>
       </div>
       <input
         type="range"
@@ -175,6 +187,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
     if (!body) return;
     const meta = ensureBodyMeta(body);
     const conveyor = getConveyorMeta(body);
+    const dtMs = (body as any).deltaTime || BASE_DELTA_MS;
     setLabel(meta.label);
     setTriad({
       mass: fmt(body.mass, 3),
@@ -187,9 +200,9 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
     setIsCharged(meta.isCharged);
     setCharge(String(meta.charge));
     setDistribution(meta.chargeDistribution);
-    setVelX(fmt(body.velocity.x, 3));
-    setVelY(fmt(body.velocity.y, 3));
-    setAngVel(fmt(body.angularVelocity, 3));
+    setVelX(fmt(worldVelocityStepToMps(body.velocity.x, dtMs), 3));
+    setVelY(fmt(worldVelocityStepToMps(body.velocity.y, dtMs), 3));
+    setAngVel(fmt(worldAngularVelocityStepToRadps(body.angularVelocity, dtMs), 3));
     setConveyorEnabled(Boolean(conveyor?.enabled));
     setConveyorSpeed(conveyor?.speed ?? 2);
     setConveyorGrip(conveyor?.grip ?? 0.28);
@@ -239,9 +252,9 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
 
       <Section title={t("section.triad")} icon={<Shield className="h-3.5 w-3.5" />}>
         <div className="grid grid-cols-3 gap-3">
-          <LabeledNumber label={t("triad.mass")} hint="m" value={triad.mass} onChange={(v) => onTriadChange("mass", v)} />
-          <LabeledNumber label={t("triad.density")} hint="ρ" value={triad.density} onChange={(v) => onTriadChange("density", v)} />
-          <LabeledNumber label={t("triad.volume")} hint="V" value={triad.volume} onChange={(v) => onTriadChange("volume", v)} />
+          <LabeledNumber label={t("triad.mass")} unit="kg" value={triad.mass} onChange={(v) => onTriadChange("mass", v)} />
+          <LabeledNumber label={t("triad.density")} unit="kg/m³" value={triad.density} onChange={(v) => onTriadChange("density", v)} />
+          <LabeledNumber label={t("triad.volume")} unit="m³" value={triad.volume} onChange={(v) => onTriadChange("volume", v)} />
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           {t("triad.tip")}
@@ -256,6 +269,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
+            unit="—"
             onChange={(v) => {
               setRestitution(v);
               body.restitution = v;
@@ -267,6 +281,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
+            unit="—"
             onChange={(v) => {
               setFriction(v);
               body.friction = v;
@@ -278,6 +293,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
+            unit="—"
             onChange={(v) => {
               setFrictionStatic(v);
               body.frictionStatic = v;
@@ -305,7 +321,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               const q = parseNum(v);
               meta.charge = q ?? 0;
             }}
-            hint="±"
+            unit="C"
           />
 
           <label className="grid gap-1">
@@ -328,9 +344,9 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
 
       <Section title={t("section.kinematics")}>
         <div className="grid grid-cols-3 gap-3">
-          <LabeledNumber label={t("kin.velX")} value={velX} onChange={setVelX} />
-          <LabeledNumber label={t("kin.velY")} value={velY} onChange={setVelY} />
-          <LabeledNumber label={t("kin.angVel")} value={angVel} onChange={setAngVel} />
+          <LabeledNumber label={t("kin.velX")} unit="m/s" value={velX} onChange={setVelX} />
+          <LabeledNumber label={t("kin.velY")} unit="m/s" value={velY} onChange={setVelY} />
+          <LabeledNumber label={t("kin.angVel")} unit="rad/s" value={angVel} onChange={setAngVel} />
         </div>
         <div className="mt-3 flex items-center gap-2">
           <button
@@ -339,8 +355,10 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               const vx = parseNum(velX);
               const vy = parseNum(velY);
               const w = parseNum(angVel);
-              if (vx !== null && vy !== null) Matter.Body.setVelocity(body, { x: vx, y: vy });
-              if (w !== null) Matter.Body.setAngularVelocity(body, w);
+              if (vx !== null && vy !== null) {
+                Matter.Body.setVelocity(body, { x: mpsToWorldVelocityBaseStep(vx), y: mpsToWorldVelocityBaseStep(vy) });
+              }
+              if (w !== null) Matter.Body.setAngularVelocity(body, radpsToWorldAngularVelocityBaseStep(w));
             }}
             className="h-9 flex-1 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
           >
@@ -387,6 +405,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               min={-5}
               max={5}
               step={0.01}
+              unit="m/s"
               onChange={(v) => {
                 setConveyorSpeed(v);
                 if (conveyorEnabled) ensureConveyorMeta(body, { speed: v });
@@ -398,6 +417,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               min={0}
               max={1}
               step={0.01}
+              unit="—"
               onChange={(v) => {
                 setConveyorGrip(v);
                 if (conveyorEnabled) ensureConveyorMeta(body, { grip: v });

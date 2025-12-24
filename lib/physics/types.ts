@@ -71,5 +71,6 @@ export type HoverReadout = {
   screenX: number;
   screenY: number;
   velocity: number;
+  force: number;
   kineticEnergy: number;
 };

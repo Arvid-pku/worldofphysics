@@ -83,6 +83,7 @@ export function createBodyFromSnapshot(
     restitution: snapshot.restitution,
     friction: snapshot.friction,
     frictionStatic: snapshot.frictionStatic,
+    frictionAir: 0,
     angle: snapshot.angle
   };
 

@@ -45,6 +45,7 @@ export const en = {
   "controls.timeHint": "0 = freeze, 1 = realtime",
 
   "hover.velocity": "Velocity",
+  "hover.force": "Force |F|",
   "hover.kineticEnergy": "Kinetic Energy",
 
   "inspector.title": "Inspector",
@@ -153,6 +154,7 @@ export const zh = {
   "controls.timeHint": "0 = 冻结，1 = 实时",
 
   "hover.velocity": "速度",
+  "hover.force": "合力 |F|",
   "hover.kineticEnergy": "动能",
 
   "inspector.title": "属性面板",
