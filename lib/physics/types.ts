@@ -4,6 +4,7 @@ export type ToolId =
   | "velocity"
   | "ruler"
   | "protractor"
+  | "pin"
   | "circle"
   | "rectangle"
   | "polygon"
@@ -18,6 +19,8 @@ export type ToolId =
   | "field_e_circle"
   | "field_b_rect"
   | "field_b_circle";
+
+export type RightPanelTab = "inspector" | "graphs" | "fbd";
 
 export type FieldKind = "electric" | "magnetic";
 export type FieldShape = "rect" | "circle";

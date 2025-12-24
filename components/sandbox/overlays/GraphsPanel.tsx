@@ -47,7 +47,7 @@ function fmt(n: number) {
 
 export function GraphsPanel() {
   const { t } = useI18n();
-  const { engineRef, selected, gravity, showGraphs } = useSandbox();
+  const { engineRef, selected, gravity } = useSandbox();
 
   const bodyId = selected.kind === "body" ? selected.id : null;
 
@@ -82,7 +82,6 @@ export function GraphsPanel() {
   }, [bodyId]);
 
   useEffect(() => {
-    if (!showGraphs) return;
     let raf = 0;
 
     const loop = () => {
@@ -132,10 +131,9 @@ export function GraphsPanel() {
 
     raf = window.requestAnimationFrame(loop);
     return () => window.cancelAnimationFrame(raf);
-  }, [bodyId, engineRef, gravity, showGraphs]);
+  }, [bodyId, engineRef, gravity]);
 
   useEffect(() => {
-    if (!showGraphs) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -229,62 +227,58 @@ export function GraphsPanel() {
 
     raf = window.requestAnimationFrame(draw);
     return () => window.cancelAnimationFrame(raf);
-  }, [metric, metricLabel.label, metricLabel.unit, showGraphs]);
-
-  if (!showGraphs) return null;
+  }, [metric, metricLabel.label, metricLabel.unit]);
 
   return (
-    <div className="pointer-events-none absolute bottom-4 left-4 z-30 w-[420px] max-w-[calc(100vw-2rem)]">
-      <div className="pointer-events-auto overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/40 shadow-xl backdrop-blur">
-        <header className="flex items-center justify-between gap-2 border-b border-slate-800/70 px-4 py-3">
-          <div className="text-sm font-semibold text-slate-100">{t("graphs.title")}</div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <span className="text-slate-400">{t("graphs.metric")}</span>
-              <select
-                value={metric}
-                onChange={(e) => setMetric(e.target.value as MetricKey)}
-                className="h-8 rounded-md border border-slate-800 bg-slate-950/60 px-2 text-xs text-slate-200 outline-none"
-              >
-                <option value="x">x(t) (m)</option>
-                <option value="y">y(t) (m)</option>
-                <option value="speed">|v|(t) (m/s)</option>
-                <option value="accel">|a|(t) (m/s²)</option>
-                <option value="ke">KE(t) (J)</option>
-                <option value="pe">PE(t) (J)</option>
-                <option value="energy">E(t) (J)</option>
-                <option value="momentum">|p|(t) (kg·m/s)</option>
-                <option value="impulse">|J|(t) (N·s)</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                samplesRef.current = [];
-                lastRef.current = null;
-              }}
-              className={cn(
-                "h-8 rounded-md border border-slate-800 bg-slate-950/40 px-2 text-xs text-slate-200 hover:bg-slate-900/50",
-                !bodyId ? "opacity-60" : ""
-              )}
-              disabled={!bodyId}
+    <div className="overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/40 shadow-xl backdrop-blur">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-800/70 px-4 py-3">
+        <div className="text-sm font-semibold text-slate-100">{t("graphs.title")}</div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-300">
+            <span className="text-slate-400">{t("graphs.metric")}</span>
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value as MetricKey)}
+              className="h-8 rounded-md border border-slate-800 bg-slate-950/60 px-2 text-xs text-slate-200 outline-none"
             >
-              {t("graphs.clear")}
-            </button>
-          </div>
-        </header>
-
-        <div className="p-3">
-          {!bodyId ? (
-            <div className="grid place-items-center rounded-lg border border-slate-800/60 bg-slate-950/40 p-6 text-xs text-slate-400">
-              {t("graphs.empty")}
-            </div>
-          ) : (
-            <div className="h-[220px] rounded-lg border border-slate-800/60 bg-slate-950/30">
-              <canvas ref={canvasRef} className="h-full w-full" />
-            </div>
-          )}
+              <option value="x">x(t) (m)</option>
+              <option value="y">y(t) (m)</option>
+              <option value="speed">|v|(t) (m/s)</option>
+              <option value="accel">|a|(t) (m/s²)</option>
+              <option value="ke">KE(t) (J)</option>
+              <option value="pe">PE(t) (J)</option>
+              <option value="energy">E(t) (J)</option>
+              <option value="momentum">|p|(t) (kg·m/s)</option>
+              <option value="impulse">|J|(t) (N·s)</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              samplesRef.current = [];
+              lastRef.current = null;
+            }}
+            className={cn(
+              "h-8 rounded-md border border-slate-800 bg-slate-950/40 px-2 text-xs text-slate-200 hover:bg-slate-900/50",
+              !bodyId ? "opacity-60" : ""
+            )}
+            disabled={!bodyId}
+          >
+            {t("graphs.clear")}
+          </button>
         </div>
+      </header>
+
+      <div className="p-3">
+        {!bodyId ? (
+          <div className="grid place-items-center rounded-lg border border-slate-800/60 bg-slate-950/40 p-6 text-xs text-slate-400">
+            {t("graphs.empty")}
+          </div>
+        ) : (
+          <div className="h-[240px] rounded-lg border border-slate-800/60 bg-slate-950/30">
+            <canvas ref={canvasRef} className="h-full w-full" />
+          </div>
+        )}
       </div>
     </div>
   );

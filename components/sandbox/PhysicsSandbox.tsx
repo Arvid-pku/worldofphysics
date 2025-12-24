@@ -2,12 +2,10 @@
 
 import { I18nProvider } from "@/components/i18n/I18nProvider";
 import { KeyboardShortcuts } from "@/components/sandbox/KeyboardShortcuts";
+import { RightPanel } from "@/components/sandbox/RightPanel";
 import { Sidebar } from "@/components/sandbox/Sidebar";
 import { HoverTooltip } from "@/components/sandbox/overlays/HoverTooltip";
-import { FbdPanel } from "@/components/sandbox/overlays/FbdPanel";
 import { LabsPanel } from "@/components/sandbox/overlays/LabsPanel";
-import { GraphsPanel } from "@/components/sandbox/overlays/GraphsPanel";
-import { InspectorPanel } from "@/components/sandbox/overlays/InspectorPanel";
 import { TopControls } from "@/components/sandbox/overlays/TopControls";
 import { SandboxProvider } from "@/components/sandbox/SandboxContext";
 import { SimulationCanvas } from "@/components/sandbox/SimulationCanvas";
@@ -19,14 +17,14 @@ export default function PhysicsSandbox() {
         <KeyboardShortcuts />
         <div className="flex h-full w-full">
           <Sidebar />
-          <div className="relative flex-1 overflow-hidden">
-            <SimulationCanvas />
-            <TopControls />
-            <LabsPanel />
-            <GraphsPanel />
-            <FbdPanel />
-            <InspectorPanel />
-            <HoverTooltip />
+          <div className="flex min-w-0 flex-1 overflow-hidden">
+            <div className="relative min-w-0 flex-1 overflow-hidden">
+              <SimulationCanvas />
+              <TopControls />
+              <LabsPanel />
+              <HoverTooltip />
+            </div>
+            <RightPanel />
           </div>
         </div>
       </SandboxProvider>

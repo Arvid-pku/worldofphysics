@@ -4,7 +4,7 @@ import * as Matter from "matter-js";
 
 import { ensureBodyMeta } from "@/lib/physics/bodyMeta";
 import { setBodyShape } from "@/lib/physics/bodyShape";
-import type { FieldRegion, ToolId } from "@/lib/physics/types";
+import type { FieldRegion, RightPanelTab, ToolId } from "@/lib/physics/types";
 import { PX_PER_METER, mpsToWorldVelocityBaseStep, metersToWorld } from "@/lib/physics/units";
 import { createId } from "@/lib/utils/id";
 
@@ -27,7 +27,7 @@ export type LabScene = {
     tool?: ToolId;
     gravity?: number;
     showTrails?: boolean;
-    showGraphs?: boolean;
+    rightPanelTab?: RightPanelTab;
   };
 };
 
@@ -110,7 +110,7 @@ export function buildLabScene(labId: LabId): LabScene {
         fields,
         camera: { x: 0, y: metersToWorld(1.2), zoom: 1 },
         selectBodyId: meta.id,
-        recommended: { tool: "velocity", gravity: 9.8, showTrails: true, showGraphs: true }
+        recommended: { tool: "velocity", gravity: 9.8, showTrails: true, rightPanelTab: "graphs" }
       };
     }
     case "pendulum": {
@@ -134,8 +134,8 @@ export function buildLabScene(labId: LabId): LabScene {
         bodyB: bob,
         pointB: { x: 0, y: 0 },
         length,
-        stiffness: 0.92,
-        damping: 0.02
+        stiffness: 1,
+        damping: 0
       });
       constraints.push(rope);
 
@@ -151,7 +151,7 @@ export function buildLabScene(labId: LabId): LabScene {
         fields,
         camera: { x: 0, y: metersToWorld(0.8), zoom: 1 },
         selectBodyId: meta.id,
-        recommended: { tool: "select", gravity: 9.8, showTrails: false, showGraphs: true }
+        recommended: { tool: "select", gravity: 9.8, showTrails: false, rightPanelTab: "graphs" }
       };
     }
     case "atwood": {
@@ -191,7 +191,7 @@ export function buildLabScene(labId: LabId): LabScene {
       bodies.push(m1, m2);
 
       const ropeLen = Math.hypot(m1.position.x - m2.position.x, m1.position.y - m2.position.y);
-      const rope = Matter.Constraint.create({ bodyA: m1, bodyB: m2, length: ropeLen, stiffness: 0.9, damping: 0.02 });
+      const rope = Matter.Constraint.create({ bodyA: m1, bodyB: m2, length: ropeLen, stiffness: 0.9, damping: 0 });
       constraints.push(rope);
 
       // "Pulley" marker.
@@ -206,7 +206,7 @@ export function buildLabScene(labId: LabId): LabScene {
         fields,
         camera: { x: 0, y: metersToWorld(1.4), zoom: 1 },
         selectBodyId: meta2.id ?? meta1.id,
-        recommended: { tool: "select", gravity: 9.8, showTrails: false, showGraphs: true }
+        recommended: { tool: "select", gravity: 9.8, showTrails: false, rightPanelTab: "graphs" }
       };
     }
     case "charges": {
@@ -248,7 +248,7 @@ export function buildLabScene(labId: LabId): LabScene {
         fields,
         camera: { x: 0, y: metersToWorld(1.5), zoom: 1 },
         selectBodyId: mb.id ?? ma.id,
-        recommended: { tool: "select", gravity: 0, showTrails: true, showGraphs: true }
+        recommended: { tool: "select", gravity: 0, showTrails: true, rightPanelTab: "graphs" }
       };
     }
     case "velocity": {
@@ -273,7 +273,7 @@ export function buildLabScene(labId: LabId): LabScene {
         fields,
         camera: { x: 0, y: metersToWorld(1.4), zoom: 1 },
         selectBodyId: meta.id,
-        recommended: { tool: "velocity", gravity: 9.8, showTrails: false, showGraphs: true }
+        recommended: { tool: "velocity", gravity: 9.8, showTrails: false, rightPanelTab: "graphs" }
       };
     }
     default: {
@@ -282,4 +282,3 @@ export function buildLabScene(labId: LabId): LabScene {
     }
   }
 }
-

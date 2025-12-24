@@ -7,7 +7,7 @@ import { findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { applyBodyState, type ApplyBodyStateOptions, type BodyState } from "@/lib/physics/bodyState";
 import { getBodyRopeGroup, getConstraintRopeGroup } from "@/lib/physics/bodyShape";
 import { createBodyFromSnapshot, snapshotBody, type BodySnapshot } from "@/lib/physics/snapshot";
-import type { FbdAxesMode, FbdReadout, FieldRegion, HoverReadout, SelectedEntity, ToolId } from "@/lib/physics/types";
+import type { FbdAxesMode, FbdReadout, FieldRegion, HoverReadout, RightPanelTab, SelectedEntity, ToolId } from "@/lib/physics/types";
 import { createId } from "@/lib/utils/id";
 
 type WorldPoint = { x: number; y: number };
@@ -29,6 +29,12 @@ export type SandboxState = {
   setGravity: (value: number) => void;
   timeScale: number;
   setTimeScale: (value: number) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (value: boolean) => void;
+  rightPanelTab: RightPanelTab;
+  setRightPanelTab: (value: RightPanelTab) => void;
+  rightPanelCollapsed: boolean;
+  setRightPanelCollapsed: (value: boolean) => void;
   showLabs: boolean;
   setShowLabs: (value: boolean) => void;
   activeLabId: string | null;
@@ -40,8 +46,6 @@ export type SandboxState = {
   nextLabStep: (stepCount: number) => void;
   prevLabStep: () => void;
   consumePendingLabId: () => string | null;
-  showFbd: boolean;
-  setShowFbd: (value: boolean) => void;
   fbdAxesMode: FbdAxesMode;
   setFbdAxesMode: (value: FbdAxesMode) => void;
   fbdReadout: FbdReadout | null;
@@ -52,8 +56,6 @@ export type SandboxState = {
   setShowCollisionPoints: (value: boolean) => void;
   showTrails: boolean;
   setShowTrails: (value: boolean) => void;
-  showGraphs: boolean;
-  setShowGraphs: (value: boolean) => void;
   snapEnabled: boolean;
   setSnapEnabled: (value: boolean) => void;
   snapStepMeters: number;
@@ -108,16 +110,17 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const [isRunning, setIsRunning] = useState(true);
   const [gravity, setGravity] = useState(9.8);
   const [timeScale, setTimeScale] = useState(1);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("inspector");
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
   const [labStepIndex, setLabStepIndex] = useState(0);
-  const [showFbd, setShowFbd] = useState(false);
   const [fbdAxesMode, setFbdAxesMode] = useState<FbdAxesMode>("world");
   const [fbdReadout, setFbdReadout] = useState<FbdReadout | null>(null);
   const [showVelocityVectors, setShowVelocityVectors] = useState(false);
   const [showCollisionPoints, setShowCollisionPoints] = useState(true);
   const [showTrails, setShowTrails] = useState(false);
-  const [showGraphs, setShowGraphs] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(false);
   const [snapStepMeters, setSnapStepMeters] = useState(0.25);
   const [tool, setTool] = useState<ToolId>("select");
@@ -581,6 +584,12 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setGravity,
       timeScale,
       setTimeScale,
+      sidebarCollapsed,
+      setSidebarCollapsed,
+      rightPanelTab,
+      setRightPanelTab,
+      rightPanelCollapsed,
+      setRightPanelCollapsed,
       showLabs,
       setShowLabs,
       activeLabId,
@@ -592,8 +601,6 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       nextLabStep,
       prevLabStep,
       consumePendingLabId,
-      showFbd,
-      setShowFbd,
       fbdAxesMode,
       setFbdAxesMode,
       fbdReadout,
@@ -604,8 +611,6 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setShowCollisionPoints,
       showTrails,
       setShowTrails,
-      showGraphs,
-      setShowGraphs,
       snapEnabled,
       setSnapEnabled,
       snapStepMeters,
@@ -656,6 +661,9 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       hoveredBodyId,
       isRunning,
       paste,
+      sidebarCollapsed,
+      rightPanelCollapsed,
+      rightPanelTab,
       requestReset,
       requestStep,
       resetNonce,
@@ -674,9 +682,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       showLabs,
       fbdAxesMode,
       fbdReadout,
-      showFbd,
       showCollisionPoints,
-      showGraphs,
       showTrails,
       showVelocityVectors,
       snapEnabled,

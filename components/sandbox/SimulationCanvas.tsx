@@ -4,12 +4,14 @@ import React, { useEffect, useMemo, useRef } from "react";
 import * as Matter from "matter-js";
 
 import { useSandbox } from "@/components/sandbox/SandboxContext";
+import { getSceneModuleById } from "@/lib/library/modules";
 import { buildLabScene, type LabId } from "@/lib/labs/labs";
 import { ensureBodyMeta, findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { getBodyShape, inferBodyShape, setBodyRopeGroup, setBodyShape, setConstraintRopeGroup, type BodyShape } from "@/lib/physics/bodyShape";
 import { applyConveyorBelts, ensureConveyorMeta, getConveyorMeta } from "@/lib/physics/conveyor";
 import { applyElectromagnetism } from "@/lib/physics/em";
 import { isPointInField } from "@/lib/physics/fields";
+import { getSensorMeta } from "@/lib/physics/sensors";
 import type { FieldRegion, ToolId } from "@/lib/physics/types";
 import {
   BASE_DELTA_MS,
@@ -142,8 +144,10 @@ export function SimulationCanvas() {
     showVelocityVectors,
     showTrails,
     setShowTrails,
-    setShowGraphs,
-    showFbd,
+    rightPanelTab,
+    setRightPanelTab,
+    rightPanelCollapsed,
+    setRightPanelCollapsed,
     fbdAxesMode,
     setFbdReadout,
     snapEnabled,
@@ -207,8 +211,9 @@ export function SimulationCanvas() {
   }, [showTrails]);
 
   useEffect(() => {
-    if (!showFbd) setFbdReadout(null);
-  }, [setFbdReadout, showFbd]);
+    const enabled = !rightPanelCollapsed && rightPanelTab === "fbd";
+    if (!enabled) setFbdReadout(null);
+  }, [rightPanelCollapsed, rightPanelTab, setFbdReadout]);
 
   useEffect(() => {
     if (tool !== "ruler" && tool !== "protractor") measurementRef.current = null;
@@ -238,7 +243,7 @@ export function SimulationCanvas() {
     showCollisionPoints,
     showVelocityVectors,
     showTrails,
-    showFbd,
+    showFbd: !rightPanelCollapsed && rightPanelTab === "fbd",
     fbdAxesMode,
     snapEnabled,
     snapStepMeters
@@ -253,12 +258,25 @@ export function SimulationCanvas() {
       showCollisionPoints,
       showVelocityVectors,
       showTrails,
-      showFbd,
+      showFbd: !rightPanelCollapsed && rightPanelTab === "fbd",
       fbdAxesMode,
       snapEnabled,
       snapStepMeters
     };
-  }, [fbdAxesMode, gravity, isRunning, showCollisionPoints, showFbd, showTrails, showVelocityVectors, snapEnabled, snapStepMeters, timeScale, tool]);
+  }, [
+    fbdAxesMode,
+    gravity,
+    isRunning,
+    rightPanelCollapsed,
+    rightPanelTab,
+    showCollisionPoints,
+    showTrails,
+    showVelocityVectors,
+    snapEnabled,
+    snapStepMeters,
+    timeScale,
+    tool
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -282,8 +300,11 @@ export function SimulationCanvas() {
       const scene = buildLabScene(pendingLabId as LabId);
       if (scene.recommended?.gravity !== undefined) setGravity(scene.recommended.gravity);
       if (scene.recommended?.showTrails !== undefined) setShowTrails(scene.recommended.showTrails);
-      if (scene.recommended?.showGraphs !== undefined) setShowGraphs(scene.recommended.showGraphs);
       if (scene.recommended?.tool) setTool(scene.recommended.tool);
+      if (scene.recommended?.rightPanelTab) {
+        setRightPanelTab(scene.recommended.rightPanelTab);
+        setRightPanelCollapsed(false);
+      }
 
       if (scene.camera) cameraRef.current = { ...scene.camera };
       if (scene.bodies.length) Matter.World.add(engine.world, scene.bodies);
@@ -297,6 +318,11 @@ export function SimulationCanvas() {
     const onCollisionStart = (evt: Matter.IEventCollision<Matter.Engine>) => {
       const now = performance.now();
       for (const pair of evt.pairs) {
+        const aSensor = getSensorMeta(pair.bodyA);
+        const bSensor = getSensorMeta(pair.bodyB);
+        if (aSensor?.enabled && !bSensor?.enabled) aSensor.count += 1;
+        if (bSensor?.enabled && !aSensor?.enabled) bSensor.count += 1;
+
         for (const s of pair.collision.supports as Array<{ x: number; y: number } | null | undefined>) {
           if (!s) continue;
           if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
@@ -714,12 +740,15 @@ export function SimulationCanvas() {
         const isStatic = body.isStatic;
         const conveyor = getConveyorMeta(body);
         const isConveyor = Boolean(conveyor?.enabled);
+        const sensor = getSensorMeta(body);
+        const isSensor = Boolean(sensor?.enabled);
         const id = meta?.id ?? null;
         const isSelected = Boolean(id && selectedBodyIdSet.has(id));
         const isPrimarySelected = Boolean(selectedBodyId && id === selectedBodyId);
         const isHovered = Boolean(hoveredId && id === hoveredId);
         if (isPrimarySelected) primaryBody = body;
 
+        ctx.setLineDash([]);
         ctx.fillStyle = isStatic ? "rgba(15, 23, 42, 0.85)" : "rgba(15, 23, 42, 0.95)";
         ctx.strokeStyle = isStatic ? "rgba(148, 163, 184, 0.25)" : "rgba(226, 232, 240, 0.25)";
         ctx.lineWidth = 1.25 / camera.zoom;
@@ -730,6 +759,14 @@ export function SimulationCanvas() {
           ctx.strokeStyle = "rgba(20, 184, 166, 0.55)";
           ctx.shadowColor = "rgba(20, 184, 166, 0.25)";
           ctx.shadowBlur = 14 / camera.zoom;
+        }
+
+        if (isSensor) {
+          ctx.fillStyle = "rgba(2, 6, 23, 0.2)";
+          ctx.strokeStyle = "rgba(168, 85, 247, 0.75)";
+          ctx.lineWidth = 1.5 / camera.zoom;
+          ctx.setLineDash([10 / camera.zoom, 8 / camera.zoom]);
+          ctx.shadowBlur = 0;
         }
 
         if (isCharged) {
@@ -754,6 +791,22 @@ export function SimulationCanvas() {
         }
         ctx.fill();
         ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (isSensor && sensor) {
+          const label = `${sensor.label}: ${sensor.count}`;
+          const labelX = body.position.x;
+          const labelY = body.bounds.min.y - 18 / camera.zoom;
+          ctx.shadowBlur = 0;
+          ctx.font = `${12 / camera.zoom}px ui-sans-serif, system-ui, -apple-system`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.strokeStyle = "rgba(2, 6, 23, 0.9)";
+          ctx.lineWidth = 4 / camera.zoom;
+          ctx.strokeText(label, labelX, labelY);
+          ctx.fillStyle = "rgba(226, 232, 240, 0.9)";
+          ctx.fillText(label, labelX, labelY);
+        }
 
         if (isConveyor && conveyor) {
           ctx.shadowBlur = 0;
@@ -1251,8 +1304,9 @@ export function SimulationCanvas() {
     setFbdReadout,
     setHoverReadout,
     setHoveredBodyId,
-    setShowGraphs,
     setShowTrails,
+    setRightPanelCollapsed,
+    setRightPanelTab,
     setTool,
     stepRequestedRef
   ]);
@@ -1289,6 +1343,35 @@ export function SimulationCanvas() {
     <div className="absolute inset-0">
       <canvas
         ref={canvasRef}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const engine = engineRef.current;
+          if (!engine) return;
+          const moduleId = e.dataTransfer.getData("application/x-wop-module") || e.dataTransfer.getData("text/plain");
+          const mod = getSceneModuleById(moduleId);
+          if (!mod) return;
+
+          const rect = canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const world = screenToWorld(x, y, rect);
+
+          const created = mod.create(snapWorld(world));
+          const selectionBefore = selectedRef.current;
+          const nextSelection = created.selectBodyId ? ({ kind: "body", id: created.selectBodyId } as const) : selectionBefore;
+          commitWorldAdd({
+            bodies: created.bodies,
+            constraints: created.constraints,
+            selectionBefore,
+            selectionAfter: nextSelection
+          });
+        }}
         onPointerDown={(e) => {
           const canvas = canvasRef.current;
           if (!canvas) return;
@@ -1359,6 +1442,23 @@ export function SimulationCanvas() {
             selectBody(meta.id);
             interactionRef.current = { kind: "set_velocity", pointerId: e.pointerId, bodyMetaId: meta.id, currentWorld: snapWorld(world) };
             canvas.setPointerCapture(e.pointerId);
+            return;
+          }
+
+          if (tool === "pin") {
+            const p = snapWorld(world);
+            const r = metersToWorld(0.08);
+            const pin = Matter.Bodies.circle(p.x, p.y, r, {
+              restitution: 0.25,
+              friction: 0.12,
+              frictionStatic: 0.5,
+              frictionAir: 0,
+              isStatic: true,
+              isSensor: true
+            });
+            const meta = ensureBodyMeta(pin, { label: "Pin" });
+            setBodyShape(pin, { kind: "circle", radius: r });
+            commitWorldAdd({ bodies: [pin], selectionBefore: selectedRef.current, selectionAfter: { kind: "body", id: meta.id } });
             return;
           }
 
