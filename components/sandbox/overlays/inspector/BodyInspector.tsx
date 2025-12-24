@@ -2,11 +2,12 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import * as Matter from "matter-js";
-import { RotateCw, Shield, Zap } from "lucide-react";
+import { MoveRight, RotateCw, Shield, Zap } from "lucide-react";
 
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureBodyMeta, findBodyByMetaId } from "@/lib/physics/bodyMeta";
+import { ensureConveyorMeta, getConveyorMeta, setConveyorMeta } from "@/lib/physics/conveyor";
 import type { ChargeDistribution } from "@/lib/physics/types";
 import { cn } from "@/lib/utils/cn";
 
@@ -166,9 +167,14 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
   const [velY, setVelY] = useState("0");
   const [angVel, setAngVel] = useState("0");
 
+  const [conveyorEnabled, setConveyorEnabled] = useState(false);
+  const [conveyorSpeed, setConveyorSpeed] = useState(2);
+  const [conveyorGrip, setConveyorGrip] = useState(0.28);
+
   useEffect(() => {
     if (!body) return;
     const meta = ensureBodyMeta(body);
+    const conveyor = getConveyorMeta(body);
     setLabel(meta.label);
     setTriad({
       mass: fmt(body.mass, 3),
@@ -184,6 +190,9 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
     setVelX(fmt(body.velocity.x, 3));
     setVelY(fmt(body.velocity.y, 3));
     setAngVel(fmt(body.angularVelocity, 3));
+    setConveyorEnabled(Boolean(conveyor?.enabled));
+    setConveyorSpeed(conveyor?.speed ?? 2);
+    setConveyorGrip(conveyor?.grip ?? 0.28);
   }, [bodyId, body]);
 
   if (!body) {
@@ -350,6 +359,52 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           >
             {t("kin.zero")}
           </button>
+        </div>
+      </Section>
+
+      <Section title={t("section.conveyor")} icon={<MoveRight className="h-3.5 w-3.5" />}>
+        <div className="grid gap-3">
+          <Toggle
+            label={t("conveyor.enabled")}
+            checked={conveyorEnabled}
+            onChange={(v) => {
+              setConveyorEnabled(v);
+              if (v) {
+                if (!body.isStatic) Matter.Body.setStatic(body, true);
+                const meta = ensureConveyorMeta(body, { enabled: true, speed: conveyorSpeed, grip: conveyorGrip });
+                setConveyorSpeed(meta.speed);
+                setConveyorGrip(meta.grip);
+              } else {
+                setConveyorMeta(body, null);
+              }
+            }}
+          />
+
+          <div className={cn("grid gap-3", conveyorEnabled ? "" : "opacity-40")}>
+            <LabeledSlider
+              label={t("conveyor.speed")}
+              value={conveyorSpeed}
+              min={-5}
+              max={5}
+              step={0.01}
+              onChange={(v) => {
+                setConveyorSpeed(v);
+                if (conveyorEnabled) ensureConveyorMeta(body, { speed: v });
+              }}
+            />
+            <LabeledSlider
+              label={t("conveyor.grip")}
+              value={conveyorGrip}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(v) => {
+                setConveyorGrip(v);
+                if (conveyorEnabled) ensureConveyorMeta(body, { grip: v });
+              }}
+            />
+            <div className="text-[11px] text-slate-500">{t("conveyor.hint")}</div>
+          </div>
         </div>
       </Section>
     </div>

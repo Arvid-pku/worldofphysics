@@ -12,7 +12,8 @@ export const en = {
   "sidebar.section.fields": "Fields",
   "sidebar.hint.click": "click",
   "sidebar.hint.drag": "drag",
-  "sidebar.tip": "Tip: Hold Ctrl while scrolling to zoom. Use Pan to move around an “infinite” vertical world.",
+  "sidebar.tip":
+    "Tip: Ctrl+scroll to zoom. Drag Rod/Spring/Rope from a body to another body (or empty space) to connect. Shortcuts: Del, Ctrl/Cmd+C/V/D, Ctrl/Cmd+Z.",
   "sidebar.footer": "Matter.js + custom E/M",
   "sidebar.docs": "Docs",
 
@@ -27,6 +28,7 @@ export const en = {
   "tool.wall": "Wall",
   "tool.slope": "Slope",
   "tool.track": "Track (Bezier)",
+  "tool.conveyor": "Conveyor Belt",
   "tool.fieldErect": "Electric Field (Rect)",
   "tool.fieldEcircle": "Electric Field (Circle)",
   "tool.fieldBrect": "Magnetic Field (Rect)",
@@ -72,6 +74,11 @@ export const en = {
   "em.distribution.uniform": "Uniform",
 
   "section.kinematics": "Kinematics",
+  "section.conveyor": "Conveyor",
+  "conveyor.enabled": "Enabled",
+  "conveyor.speed": "Speed (m/s)",
+  "conveyor.grip": "Grip",
+  "conveyor.hint": "Applies a surface velocity to bodies in contact.",
   "kin.velX": "Vel X",
   "kin.velY": "Vel Y",
   "kin.angVel": "Ang Vel",
@@ -113,7 +120,8 @@ export const zh = {
   "sidebar.section.fields": "场",
   "sidebar.hint.click": "点击",
   "sidebar.hint.drag": "拖拽",
-  "sidebar.tip": "提示：按住 Ctrl 滚轮缩放。使用“平移”在“无限”竖直世界中移动。",
+  "sidebar.tip":
+    "提示：Ctrl+滚轮缩放。拖拽“刚性杆/弹簧/绳子”从一个物体到另一个物体（或空白处）进行连接。快捷键：Delete，Ctrl/Cmd+C/V/D，Ctrl/Cmd+Z。",
   "sidebar.footer": "Matter.js + 自定义电磁",
   "sidebar.docs": "文档",
 
@@ -128,6 +136,7 @@ export const zh = {
   "tool.wall": "墙",
   "tool.slope": "斜坡",
   "tool.track": "轨道（曲线）",
+  "tool.conveyor": "传送带",
   "tool.fieldErect": "电场（矩形）",
   "tool.fieldEcircle": "电场（圆形）",
   "tool.fieldBrect": "磁场（矩形）",
@@ -173,6 +182,11 @@ export const zh = {
   "em.distribution.uniform": "均匀分布",
 
   "section.kinematics": "运动学",
+  "section.conveyor": "传送带",
+  "conveyor.enabled": "启用",
+  "conveyor.speed": "速度 (m/s)",
+  "conveyor.grip": "抓地力",
+  "conveyor.hint": "对接触的物体施加“表面速度”。",
   "kin.velX": "速度 X",
   "kin.velY": "速度 Y",
   "kin.angVel": "角速度",

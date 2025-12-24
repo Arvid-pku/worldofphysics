@@ -2,6 +2,7 @@ import * as Matter from "matter-js";
 
 import { ensureBodyMeta, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { getBodyShape, inferBodyShape, setBodyShape, type BodyShape } from "@/lib/physics/bodyShape";
+import { getConveyorMeta, setConveyorMeta, type ConveyorMeta } from "@/lib/physics/conveyor";
 import type { BodyMeta } from "@/lib/physics/types";
 
 export type BodySnapshot = {
@@ -16,6 +17,9 @@ export type BodySnapshot = {
   velocity: { x: number; y: number };
   angularVelocity: number;
   meta: Omit<BodyMeta, "id">;
+  extras?: {
+    conveyor?: ConveyorMeta;
+  };
 };
 
 export function snapshotBody(body: Matter.Body): BodySnapshot | null {
@@ -34,7 +38,9 @@ export function snapshotBody(body: Matter.Body): BodySnapshot | null {
 
   const m = meta ?? fallback;
 
-  return {
+  const conveyor = getConveyorMeta(body);
+
+  const snapshot: BodySnapshot = {
     shape,
     position: { x: body.position.x, y: body.position.y },
     angle: body.angle,
@@ -54,6 +60,12 @@ export function snapshotBody(body: Matter.Body): BodySnapshot | null {
       density: m.density
     }
   };
+
+  if (conveyor) {
+    snapshot.extras = { ...(snapshot.extras ?? {}), conveyor: { ...conveyor } };
+  }
+
+  return snapshot;
 }
 
 export function createBodyFromSnapshot(
@@ -100,6 +112,9 @@ export function createBodyFromSnapshot(
   Matter.Body.setVelocity(body, snapshot.velocity);
   Matter.Body.setAngularVelocity(body, snapshot.angularVelocity);
 
+  if (snapshot.extras?.conveyor) {
+    setConveyorMeta(body, { ...snapshot.extras.conveyor });
+  }
+
   return body;
 }
-

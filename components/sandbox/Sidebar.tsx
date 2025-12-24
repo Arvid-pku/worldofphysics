@@ -6,6 +6,7 @@ import {
   Hand,
   Link2,
   Magnet,
+  MoveRight,
   MousePointer2,
   Spline,
   Square,
@@ -31,6 +32,7 @@ function ToolButton({ id, label, icon }: ToolButtonProps) {
   const { tool, setTool } = useSandbox();
   const { t } = useI18n();
   const active = tool === id;
+  const hint = id === "select" ? t("sidebar.hint.click") : t("sidebar.hint.drag");
   return (
     <button
       type="button"
@@ -52,7 +54,7 @@ function ToolButton({ id, label, icon }: ToolButtonProps) {
       </span>
       <span className="truncate">{label}</span>
       <span className="ml-auto text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">
-        {id === "pan" ? t("sidebar.hint.drag") : t("sidebar.hint.click")}
+        {hint}
       </span>
     </button>
   );
@@ -100,6 +102,7 @@ export function Sidebar() {
         <Section title={t("sidebar.section.statics")}>
           <ToolButton id="wall" label={t("tool.wall")} icon={<Square className="h-4 w-4" />} />
           <ToolButton id="slope" label={t("tool.slope")} icon={<TrendingUp className="h-4 w-4" />} />
+          <ToolButton id="conveyor" label={t("tool.conveyor")} icon={<MoveRight className="h-4 w-4" />} />
           <ToolButton id="track" label={t("tool.track")} icon={<Spline className="h-4 w-4" />} />
         </Section>
 

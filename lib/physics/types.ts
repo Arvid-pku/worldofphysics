@@ -6,6 +6,7 @@ export type ToolId =
   | "polygon"
   | "wall"
   | "slope"
+  | "conveyor"
   | "track"
   | "rod"
   | "rope"
@@ -72,4 +73,3 @@ export type HoverReadout = {
   velocity: number;
   kineticEnergy: number;
 };
-
