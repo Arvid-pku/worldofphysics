@@ -14,6 +14,7 @@ export type ToolId =
   | "track"
   | "rod"
   | "rope"
+  | "rigid_rope"
   | "spring"
   | "field_e_rect"
   | "field_e_circle"
@@ -21,6 +22,17 @@ export type ToolId =
   | "field_b_circle";
 
 export type RightPanelTab = "inspector" | "graphs" | "fbd";
+
+export type ConstraintKind = "rod" | "spring" | "rope" | "rigid_rope";
+
+export type ConstraintMeta = {
+  id: string;
+  kind: ConstraintKind;
+  label: string;
+  restLength: number; // world units (px), used as max length for ropes
+  stiffness: number; // 0..1
+  damping: number; // 0..1
+};
 
 export type FieldKind = "electric" | "magnetic";
 export type FieldShape = "rect" | "circle";
@@ -71,6 +83,7 @@ export type BodyMeta = {
 export type SelectedEntity =
   | { kind: "body"; id: string }
   | { kind: "field"; id: string }
+  | { kind: "constraint"; id: string }
   | { kind: "none" };
 
 export type HoverReadout = {

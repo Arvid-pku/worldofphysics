@@ -7,6 +7,7 @@ import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { FbdPanel } from "@/components/sandbox/overlays/FbdPanel";
 import { GraphsPanel } from "@/components/sandbox/overlays/GraphsPanel";
 import { BodyInspector } from "@/components/sandbox/overlays/inspector/BodyInspector";
+import { ConstraintInspector } from "@/components/sandbox/overlays/inspector/ConstraintInspector";
 import { FieldInspector } from "@/components/sandbox/overlays/inspector/FieldInspector";
 import { cn } from "@/lib/utils/cn";
 
@@ -136,6 +137,8 @@ export function RightPanel() {
                 <div className="mt-0.5 text-xs text-slate-500">
                   {selected.kind === "body"
                     ? t("inspector.subtitleBody")
+                    : selected.kind === "constraint"
+                      ? t("inspector.subtitleConstraint")
                     : selected.kind === "field"
                       ? t("inspector.subtitleField")
                       : t("panel.emptyInspector")}
@@ -155,6 +158,8 @@ export function RightPanel() {
 
             {selected.kind === "body" ? (
               <BodyInspector bodyId={selected.id} />
+            ) : selected.kind === "constraint" ? (
+              <ConstraintInspector constraintId={selected.id} />
             ) : selected.kind === "field" ? (
               <FieldInspector fieldId={selected.id} />
             ) : (
@@ -172,4 +177,3 @@ export function RightPanel() {
     </aside>
   );
 }
-

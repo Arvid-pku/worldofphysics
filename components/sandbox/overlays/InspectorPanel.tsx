@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { BodyInspector } from "@/components/sandbox/overlays/inspector/BodyInspector";
+import { ConstraintInspector } from "@/components/sandbox/overlays/inspector/ConstraintInspector";
 import { FieldInspector } from "@/components/sandbox/overlays/inspector/FieldInspector";
 
 export function InspectorPanel() {
@@ -20,7 +21,11 @@ export function InspectorPanel() {
           <div>
             <div className="text-sm font-semibold text-slate-100">{t("inspector.title")}</div>
             <div className="mt-0.5 text-xs text-slate-500">
-              {selected.kind === "body" ? t("inspector.subtitleBody") : t("inspector.subtitleField")}
+              {selected.kind === "body"
+                ? t("inspector.subtitleBody")
+                : selected.kind === "constraint"
+                  ? t("inspector.subtitleConstraint")
+                  : t("inspector.subtitleField")}
             </div>
           </div>
           <button
@@ -34,7 +39,13 @@ export function InspectorPanel() {
         </header>
 
         <div className="overflow-auto px-4 py-4 [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]">
-          {selected.kind === "body" ? <BodyInspector bodyId={selected.id} /> : <FieldInspector fieldId={selected.id} />}
+          {selected.kind === "body" ? (
+            <BodyInspector bodyId={selected.id} />
+          ) : selected.kind === "constraint" ? (
+            <ConstraintInspector constraintId={selected.id} />
+          ) : (
+            <FieldInspector fieldId={selected.id} />
+          )}
         </div>
       </div>
     </div>

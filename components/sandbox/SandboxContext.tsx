@@ -6,6 +6,8 @@ import * as Matter from "matter-js";
 import { findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { applyBodyState, type ApplyBodyStateOptions, type BodyState } from "@/lib/physics/bodyState";
 import { getBodyRopeGroup, getConstraintRopeGroup } from "@/lib/physics/bodyShape";
+import { findConstraintByMetaId } from "@/lib/physics/constraintMeta";
+import { applyConstraintState, type ConstraintState } from "@/lib/physics/constraintState";
 import { createBodyFromSnapshot, snapshotBody, type BodySnapshot } from "@/lib/physics/snapshot";
 import type { FbdAxesMode, FbdReadout, FieldRegion, HoverReadout, RightPanelTab, SelectedEntity, ToolId } from "@/lib/physics/types";
 import { createId } from "@/lib/utils/id";
@@ -73,6 +75,7 @@ export type SandboxState = {
   selectBody: (bodyId: string, opts?: { additive?: boolean; toggle?: boolean }) => void;
   setSelectedBodies: (bodyIds: string[], opts?: { primaryId?: string | null }) => void;
   selectField: (fieldId: string) => void;
+  selectConstraint: (constraintId: string) => void;
   clearSelection: () => void;
   hoveredBodyId: string | null;
   setHoveredBodyId: (id: string | null) => void;
@@ -84,6 +87,7 @@ export type SandboxState = {
   resetNonce: number;
   deleteSelected: () => void;
   deleteFieldById: (fieldId: string) => void;
+  deleteConstraintById: (constraintId: string) => void;
   copySelected: () => void;
   paste: () => void;
   duplicateSelected: () => void;
@@ -91,6 +95,7 @@ export type SandboxState = {
   redo: () => void;
   commitBodyStateChange: (payload: { bodyId: string; before: BodyState; after: BodyState; apply?: ApplyBodyStateOptions }) => void;
   commitFieldChange: (payload: { fieldId: string; before: FieldRegion; after: FieldRegion }) => void;
+  commitConstraintChange: (payload: { constraintId: string; before: ConstraintState; after: ConstraintState }) => void;
   commitWorldAdd: (payload: {
     bodies?: Matter.Body[];
     constraints?: Matter.Constraint[];
@@ -260,6 +265,35 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
     [fields, pushHistory, selected]
   );
 
+  const deleteConstraintById = useCallback(
+    (constraintId: string) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const constraint = findConstraintByMetaId(engine, constraintId);
+      if (!constraint) return;
+
+      const before = selected;
+      const after: SelectedEntity = { kind: "none" };
+
+      const action: EditorAction = {
+        redo: () => {
+          Matter.World.remove(engine.world, constraint);
+          setSelected(after);
+          setSelectedBodyIds([]);
+        },
+        undo: () => {
+          Matter.World.add(engine.world, constraint);
+          setSelected(before);
+          setSelectedBodyIds(before.kind === "body" ? [before.id] : []);
+        }
+      };
+
+      action.redo();
+      pushHistory(action);
+    },
+    [pushHistory, selected]
+  );
+
   const selectBody = useCallback(
     (bodyId: string, opts?: { additive?: boolean; toggle?: boolean }) => {
       const additive = Boolean(opts?.additive);
@@ -300,6 +334,11 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
 
   const selectField = useCallback((fieldId: string) => {
     setSelected({ kind: "field", id: fieldId });
+    setSelectedBodyIds([]);
+  }, []);
+
+  const selectConstraint = useCallback((constraintId: string) => {
+    setSelected({ kind: "constraint", id: constraintId });
     setSelectedBodyIds([]);
   }, []);
 
@@ -348,12 +387,42 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
     [pushHistory]
   );
 
+  const commitConstraintChange = useCallback(
+    (payload: { constraintId: string; before: ConstraintState; after: ConstraintState }) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const { constraintId, before, after } = payload;
+
+      const action: EditorAction = {
+        redo: () => {
+          const constraint = findConstraintByMetaId(engine, constraintId);
+          if (!constraint) return;
+          applyConstraintState(engine, constraint, after);
+        },
+        undo: () => {
+          const constraint = findConstraintByMetaId(engine, constraintId);
+          if (!constraint) return;
+          applyConstraintState(engine, constraint, before);
+        }
+      };
+
+      action.redo();
+      pushHistory(action);
+    },
+    [pushHistory]
+  );
+
   const deleteSelected = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
 
     if (selected.kind === "field") {
       deleteFieldById(selected.id);
+      return;
+    }
+
+    if (selected.kind === "constraint") {
+      deleteConstraintById(selected.id);
       return;
     }
 
@@ -414,7 +483,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
 
     action.redo();
     pushHistory(action);
-  }, [addWorldObjects, deleteFieldById, pushHistory, removeWorldObjects, selected, selectedBodyIds]);
+  }, [addWorldObjects, deleteConstraintById, deleteFieldById, pushHistory, removeWorldObjects, selected, selectedBodyIds]);
 
   const copySelected = useCallback(() => {
     const engine = engineRef.current;
@@ -636,6 +705,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       selectBody,
       setSelectedBodies,
       selectField,
+      selectConstraint,
       clearSelection,
       hoveredBodyId,
       setHoveredBodyId,
@@ -647,6 +717,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       resetNonce,
       deleteSelected,
       deleteFieldById,
+      deleteConstraintById,
       copySelected,
       paste,
       duplicateSelected,
@@ -654,6 +725,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       redo,
       commitBodyStateChange,
       commitFieldChange,
+      commitConstraintChange,
       commitWorldAdd,
       commitFieldAdd
     }),
@@ -662,8 +734,10 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       commitBodyStateChange,
       commitFieldAdd,
       commitFieldChange,
+      commitConstraintChange,
       commitWorldAdd,
       copySelected,
+      deleteConstraintById,
       deleteFieldById,
       deleteSelected,
       duplicateSelected,
@@ -685,6 +759,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       selected,
       selectedBodyIds,
       selectBody,
+      selectConstraint,
       selectField,
       setSelectedBodies,
       activeLabId,

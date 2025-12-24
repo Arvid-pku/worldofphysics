@@ -158,6 +158,7 @@ export function Sidebar() {
         <Section title={t("sidebar.section.constraints")} collapsed={sidebarCollapsed}>
           <ToolButton id="rod" label={t("tool.rod")} icon={<Link2 className="h-4 w-4" />} collapsed={sidebarCollapsed} />
           <ToolButton id="rope" label={t("tool.rope")} icon={<Cable className="h-4 w-4" />} collapsed={sidebarCollapsed} />
+          <ToolButton id="rigid_rope" label={t("tool.rigidRope")} icon={<Cable className="h-4 w-4" />} collapsed={sidebarCollapsed} />
           <ToolButton id="spring" label={t("tool.spring")} icon={<Waves className="h-4 w-4" />} collapsed={sidebarCollapsed} />
         </Section>
 

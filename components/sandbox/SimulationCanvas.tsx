@@ -8,11 +8,13 @@ import { getSceneModuleById } from "@/lib/library/modules";
 import { buildLabScene, type LabId } from "@/lib/labs/labs";
 import { ensureBodyMeta, findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
 import { getBodyShape, inferBodyShape, setBodyRopeGroup, setBodyShape, setConstraintRopeGroup, type BodyShape } from "@/lib/physics/bodyShape";
+import { ensureConstraintMeta, getConstraintMeta } from "@/lib/physics/constraintMeta";
+import { captureConstraintState, type ConstraintState } from "@/lib/physics/constraintState";
 import { applyConveyorBelts, ensureConveyorMeta, getConveyorMeta } from "@/lib/physics/conveyor";
 import { applyElectromagnetism } from "@/lib/physics/em";
 import { isPointInField } from "@/lib/physics/fields";
 import { getSensorMeta } from "@/lib/physics/sensors";
-import type { FieldRegion, ToolId } from "@/lib/physics/types";
+import type { ConstraintKind, FieldRegion, ToolId } from "@/lib/physics/types";
 import {
   BASE_DELTA_MS,
   PX_PER_METER,
@@ -65,6 +67,7 @@ type Interaction =
       hit:
         | { kind: "body"; body: Matter.Body; bodyMetaId: string }
         | { kind: "field"; fieldId: string }
+        | { kind: "constraint"; constraintId: string }
         | { kind: "empty" };
     }
   | {
@@ -115,15 +118,17 @@ type Interaction =
       startField: FieldRegion;
     }
   | {
-      kind: "drag_constraint_anchor";
+      kind: "drag_constraint_endpoint";
       pointerId: number;
       constraint: Matter.Constraint;
-      which: "pointA" | "pointB";
+      constraintId: string;
+      endpoint: "A" | "B";
+      before: ConstraintState;
     }
   | {
       kind: "constraint";
       pointerId: number;
-      tool: Extract<ToolId, "rod" | "spring" | "rope">;
+      tool: Extract<ToolId, "rod" | "spring" | "rope" | "rigid_rope">;
       startBody: Matter.Body;
       startBodyMetaId: string;
     };
@@ -163,10 +168,12 @@ export function SimulationCanvas() {
     commitWorldAdd,
     commitFieldAdd,
     commitFieldChange,
+    commitConstraintChange,
     consumePendingLabId,
     selectBody,
     setSelectedBodies,
     selectField,
+    selectConstraint,
     clearSelection,
     setHoveredBodyId,
     setHoverReadout
@@ -295,6 +302,8 @@ export function SimulationCanvas() {
     if (!ctx) return;
 
     const engine = Matter.Engine.create();
+    // Improve stability for stiff constraints (rods/ropes/pins).
+    engine.constraintIterations = 4;
     // Calibrated so `gravity` slider maps to m/s² under `PX_PER_METER`.
     engine.gravity.scale = (9.8 * PX_PER_METER) / 1_000_000;
     engineRef.current = engine;
@@ -420,6 +429,7 @@ export function SimulationCanvas() {
           emForceByBodyIdRef.current.clear();
         }
         applyConveyorBelts(engine);
+        applyTensionOnlyConstraints(engine);
         Matter.Engine.update(engine, stepDt);
         if (Number.isFinite(stepDt) && stepDt > 0) {
           const forceById = forceByBodyIdRef.current;
@@ -661,6 +671,7 @@ export function SimulationCanvas() {
       const selectedEntity = selectedRef.current;
       const selectedFieldId = selectedEntity.kind === "field" ? selectedEntity.id : null;
       const selectedBodyId = selectedEntity.kind === "body" ? selectedEntity.id : null;
+      const selectedConstraintId = selectedEntity.kind === "constraint" ? selectedEntity.id : null;
       const selectedBodyList = selectedBodyIdsRef.current;
       const selectedBodyIdSet = new Set(
         selectedBodyList.length > 0 ? selectedBodyList : selectedBodyId ? [selectedBodyId] : []
@@ -889,15 +900,32 @@ export function SimulationCanvas() {
 
       // Constraints
       const constraints = Matter.Composite.allConstraints(engine.world);
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-      ctx.lineWidth = 1 / camera.zoom;
       for (const c of constraints) {
-        const a = c.bodyA ? Matter.Vector.add(c.bodyA.position, c.pointA) : c.pointA;
-        const b = c.bodyB ? Matter.Vector.add(c.bodyB.position, c.pointB) : c.pointB;
+        const meta = ensureConstraintMeta(c);
+        const a = getConstraintEndpointWorld(c, "A");
+        const b = getConstraintEndpointWorld(c, "B");
+        if (!a || !b) continue;
+
+        const isSelected = selectedConstraintId === meta.id;
+        const baseColor =
+          meta.kind === "spring"
+            ? "rgba(168, 85, 247, 0.55)"
+            : meta.kind === "rigid_rope"
+              ? "rgba(226, 232, 240, 0.28)"
+              : meta.kind === "rope"
+                ? "rgba(148, 163, 184, 0.25)"
+                : "rgba(148, 163, 184, 0.35)";
+
+        ctx.strokeStyle = isSelected ? "rgba(59, 130, 246, 0.8)" : baseColor;
+        ctx.lineWidth = (isSelected ? 2.25 : 1.05) / camera.zoom;
+        if (meta.kind === "rope" || meta.kind === "rigid_rope") ctx.setLineDash([10 / camera.zoom, 8 / camera.zoom]);
+        else if (meta.kind === "spring") ctx.setLineDash([7 / camera.zoom, 6 / camera.zoom]);
+        else ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
+        ctx.setLineDash([]);
       }
 
       // Free-body diagram overlay (selected body)
@@ -1121,21 +1149,30 @@ export function SimulationCanvas() {
         }
       }
 
-      // Constraint endpoint handles (point anchors)
-      if (settings.tool === "select") {
+      // Constraint endpoint handles (selected constraint)
+      if (settings.tool === "select" && selectedConstraintId) {
         const constraints = Matter.Composite.allConstraints(engine.world);
-        const handleR = 5.5 / camera.zoom;
-        ctx.fillStyle = "rgba(148, 163, 184, 0.8)";
+        const handleR = 6.25 / camera.zoom;
+        ctx.fillStyle = "rgba(59, 130, 246, 0.95)";
+        ctx.strokeStyle = "rgba(147, 197, 253, 0.55)";
+        ctx.lineWidth = 1.5 / camera.zoom;
         for (const c of constraints) {
-          if (c.bodyA && !c.bodyB && c.pointB) {
-            ctx.beginPath();
-            ctx.arc(c.pointB.x, c.pointB.y, handleR, 0, Math.PI * 2);
-            ctx.fill();
-          } else if (c.bodyB && !c.bodyA && c.pointA) {
-            ctx.beginPath();
-            ctx.arc(c.pointA.x, c.pointA.y, handleR, 0, Math.PI * 2);
-            ctx.fill();
-          }
+          const meta = getConstraintMeta(c);
+          if (!meta || meta.id !== selectedConstraintId) continue;
+          const a = getConstraintEndpointWorld(c, "A");
+          const b = getConstraintEndpointWorld(c, "B");
+          if (!a || !b) continue;
+
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, handleR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, handleR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          break;
         }
       }
 
@@ -1541,7 +1578,7 @@ export function SimulationCanvas() {
             return;
           }
 
-          if (tool === "rod" || tool === "spring" || tool === "rope") {
+          if (tool === "rod" || tool === "spring" || tool === "rope" || tool === "rigid_rope") {
             const body = queryBodyAtPoint(engine, world);
             if (!body) return;
 
@@ -1564,24 +1601,47 @@ export function SimulationCanvas() {
             const handleHitR = 10 / Math.max(zoom, 0.0001);
             const hitR2 = handleHitR * handleHitR;
 
-            // Constraint anchor endpoint (point constraints)
+            // Constraint endpoint handles
             for (const c of Matter.Composite.allConstraints(engine.world)) {
-              if (c.bodyA && !c.bodyB && c.pointB) {
-                const dx = world.x - c.pointB.x;
-                const dy = world.y - c.pointB.y;
-                if (dx * dx + dy * dy <= hitR2) {
-                  interactionRef.current = { kind: "drag_constraint_anchor", pointerId: e.pointerId, constraint: c, which: "pointB" };
-                  canvas.setPointerCapture(e.pointerId);
-                  return;
-                }
-              } else if (c.bodyB && !c.bodyA && c.pointA) {
-                const dx = world.x - c.pointA.x;
-                const dy = world.y - c.pointA.y;
-                if (dx * dx + dy * dy <= hitR2) {
-                  interactionRef.current = { kind: "drag_constraint_anchor", pointerId: e.pointerId, constraint: c, which: "pointA" };
-                  canvas.setPointerCapture(e.pointerId);
-                  return;
-                }
+              const meta = ensureConstraintMeta(c);
+              const a = getConstraintEndpointWorld(c, "A");
+              const b = getConstraintEndpointWorld(c, "B");
+              if (!a || !b) continue;
+
+              const dax = world.x - a.x;
+              const day = world.y - a.y;
+              if (dax * dax + day * day <= hitR2) {
+                const before = captureConstraintState(c);
+                if (!before) continue;
+                selectConstraint(meta.id);
+                interactionRef.current = {
+                  kind: "drag_constraint_endpoint",
+                  pointerId: e.pointerId,
+                  constraint: c,
+                  constraintId: meta.id,
+                  endpoint: "A",
+                  before
+                };
+                canvas.setPointerCapture(e.pointerId);
+                return;
+              }
+
+              const dbx = world.x - b.x;
+              const dby = world.y - b.y;
+              if (dbx * dbx + dby * dby <= hitR2) {
+                const before = captureConstraintState(c);
+                if (!before) continue;
+                selectConstraint(meta.id);
+                interactionRef.current = {
+                  kind: "drag_constraint_endpoint",
+                  pointerId: e.pointerId,
+                  constraint: c,
+                  constraintId: meta.id,
+                  endpoint: "B",
+                  before
+                };
+                canvas.setPointerCapture(e.pointerId);
+                return;
               }
             }
 
@@ -1723,7 +1783,7 @@ export function SimulationCanvas() {
               }
             }
 
-            // Prefer selecting bodies over fields
+            // Prefer selecting bodies over constraints/fields
             const hitBody = queryBodyAtPoint(engine, world);
             if (hitBody) {
               const meta = ensureBodyMeta(hitBody, { label: hitBody.label || "Body" });
@@ -1734,6 +1794,20 @@ export function SimulationCanvas() {
                 startWorld: world,
                 shiftKey: e.shiftKey,
                 hit: { kind: "body", body: hitBody, bodyMetaId: meta.id }
+              };
+              canvas.setPointerCapture(e.pointerId);
+              return;
+            }
+
+            const hitConstraint = queryConstraintAtPoint(engine, world, handleHitR);
+            if (hitConstraint) {
+              interactionRef.current = {
+                kind: "select_press",
+                pointerId: e.pointerId,
+                startScreen: { x, y },
+                startWorld: world,
+                shiftKey: e.shiftKey,
+                hit: { kind: "constraint", constraintId: hitConstraint.id }
               };
               canvas.setPointerCapture(e.pointerId);
               return;
@@ -1824,10 +1898,10 @@ export function SimulationCanvas() {
           if (interaction.kind === "constraint" && interaction.pointerId === e.pointerId) {
             return;
           }
-          if (interaction.kind === "drag_constraint_anchor" && interaction.pointerId === e.pointerId) {
+          if (interaction.kind === "drag_constraint_endpoint" && interaction.pointerId === e.pointerId) {
             const p = snapWorld(world);
-            if (interaction.which === "pointB") interaction.constraint.pointB = p;
-            else interaction.constraint.pointA = p;
+            setConstraintEndpointWorld(interaction.constraint, interaction.endpoint, p);
+            syncConstraintRestLengthToCurrent(interaction.constraint);
             return;
           }
           if (interaction.kind === "move_field" && interaction.pointerId === e.pointerId) {
@@ -1925,6 +1999,10 @@ export function SimulationCanvas() {
             const dx = x - interaction.startScreen.x;
             const dy = y - interaction.startScreen.y;
             if (dx * dx + dy * dy < 16) return; // 4px
+
+            if (interaction.hit.kind === "constraint") {
+              return;
+            }
 
             if (interaction.hit.kind === "body") {
               const clickedId = interaction.hit.bodyMetaId;
@@ -2055,6 +2133,8 @@ export function SimulationCanvas() {
             if (interaction.hit.kind === "body") {
               if (interaction.shiftKey) selectBody(interaction.hit.bodyMetaId, { additive: true, toggle: true });
               else selectBody(interaction.hit.bodyMetaId);
+            } else if (interaction.hit.kind === "constraint") {
+              selectConstraint(interaction.hit.constraintId);
             } else if (interaction.hit.kind === "field") {
               selectField(interaction.hit.fieldId);
             } else {
@@ -2124,7 +2204,13 @@ export function SimulationCanvas() {
             return;
           }
 
-          if (interaction.kind === "drag_constraint_anchor" && interaction.pointerId === e.pointerId) {
+          if (interaction.kind === "drag_constraint_endpoint" && interaction.pointerId === e.pointerId) {
+            const p = snapWorld(world);
+            const hit = queryBodyAtPoint(engine, world);
+            setConstraintEndpointAttachment(interaction.constraint, interaction.endpoint, hit, p);
+            syncConstraintRestLengthToCurrent(interaction.constraint);
+            const after = captureConstraintState(interaction.constraint);
+            if (after) commitConstraintChange({ constraintId: interaction.constraintId, before: interaction.before, after });
             interactionRef.current = { kind: "none" };
             canvas.releasePointerCapture(e.pointerId);
             return;
@@ -2138,42 +2224,24 @@ export function SimulationCanvas() {
 
             if (endBody && endBody.id !== startBody.id) {
               const endMeta = ensureBodyMeta(endBody, { label: endBody.label || "Body" });
-              if (interaction.tool === "rope") {
-                const rope = addRopeChain(startBody, endBody);
-                commitWorldAdd({
-                  bodies: rope.bodies,
-                  constraints: rope.constraints,
-                  selectionBefore,
-                  selectionAfter: { kind: "body", id: endMeta.id }
-                });
-              } else {
-                const constraint = createConstraintBetweenBodies(interaction.tool, startBody, endBody);
-                commitWorldAdd({
-                  constraints: [constraint],
-                  selectionBefore,
-                  selectionAfter: { kind: "body", id: endMeta.id }
-                });
-              }
+              const kind = toolIdToConstraintKind(interaction.tool);
+              const constraint = createConstraintBetweenBodies(kind, startBody, endBody);
+              commitWorldAdd({
+                constraints: [constraint],
+                selectionBefore,
+                selectionAfter: { kind: "body", id: endMeta.id }
+              });
             } else if (!endBody) {
               const endPoint = snapWorld(world);
               const dist = Math.hypot(endPoint.x - startBody.position.x, endPoint.y - startBody.position.y);
               if (dist > 24) {
-                if (interaction.tool === "rope") {
-                  const rope = addRopeChainToPoint(startBody, endPoint);
-                  commitWorldAdd({
-                    bodies: rope.bodies,
-                    constraints: rope.constraints,
-                    selectionBefore,
-                    selectionAfter: { kind: "body", id: startId }
-                  });
-                } else {
-                  const constraint = createConstraintToPoint(interaction.tool, startBody, endPoint);
-                  commitWorldAdd({
-                    constraints: [constraint],
-                    selectionBefore,
-                    selectionAfter: { kind: "body", id: startId }
-                  });
-                }
+                const kind = toolIdToConstraintKind(interaction.tool);
+                const constraint = createConstraintToPoint(kind, startBody, endPoint);
+                commitWorldAdd({
+                  constraints: [constraint],
+                  selectionBefore,
+                  selectionAfter: { kind: "body", id: startId }
+                });
               }
             }
 
@@ -2230,7 +2298,7 @@ export function SimulationCanvas() {
             ? "cursor-grab active:cursor-grabbing"
             : tool === "select"
               ? "cursor-default"
-              : tool === "rod" || tool === "spring" || tool === "rope"
+              : tool === "rod" || tool === "spring" || tool === "rope" || tool === "rigid_rope"
                 ? "cursor-cell"
                 : "cursor-crosshair"
         )}
@@ -2246,35 +2314,198 @@ function queryBodyAtPoint(engine: Matter.Engine, point: WorldPoint): Matter.Body
   return found[found.length - 1] ?? null;
 }
 
-function createConstraintBetweenBodies(tool: "rod" | "spring", a: Matter.Body, b: Matter.Body) {
-  const len = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
-  if (tool === "rod") {
-    return Matter.Constraint.create({ bodyA: a, pointA: { x: 0, y: 0 }, bodyB: b, pointB: { x: 0, y: 0 }, length: len, stiffness: 1 });
+function toolIdToConstraintKind(tool: Extract<ToolId, "rod" | "spring" | "rope" | "rigid_rope">): ConstraintKind {
+  return tool;
+}
+
+function getConstraintEndpointWorld(constraint: Matter.Constraint, endpoint: "A" | "B"): WorldPoint | null {
+  const body = endpoint === "A" ? constraint.bodyA : constraint.bodyB;
+  const point = endpoint === "A" ? constraint.pointA : constraint.pointB;
+  if (body) {
+    const rel = point ?? { x: 0, y: 0 };
+    return { x: body.position.x + rel.x, y: body.position.y + rel.y };
   }
-  return Matter.Constraint.create({
+  if (!point) return null;
+  return { x: point.x, y: point.y };
+}
+
+function distPointToSegmentSquared(p: WorldPoint, a: WorldPoint, b: WorldPoint) {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const wx = p.x - a.x;
+  const wy = p.y - a.y;
+  const c1 = vx * wx + vy * wy;
+  if (c1 <= 0) return wx * wx + wy * wy;
+  const c2 = vx * vx + vy * vy;
+  if (c2 <= c1) {
+    const dx = p.x - b.x;
+    const dy = p.y - b.y;
+    return dx * dx + dy * dy;
+  }
+  const t = c2 > 0 ? c1 / c2 : 0;
+  const projX = a.x + t * vx;
+  const projY = a.y + t * vy;
+  const dx = p.x - projX;
+  const dy = p.y - projY;
+  return dx * dx + dy * dy;
+}
+
+function queryConstraintAtPoint(engine: Matter.Engine, point: WorldPoint, radius: number): { id: string; constraint: Matter.Constraint } | null {
+  const constraints = Matter.Composite.allConstraints(engine.world);
+  const r2 = radius * radius;
+  for (let i = constraints.length - 1; i >= 0; i -= 1) {
+    const c = constraints[i]!;
+    const a = getConstraintEndpointWorld(c, "A");
+    const b = getConstraintEndpointWorld(c, "B");
+    if (!a || !b) continue;
+    if (distPointToSegmentSquared(point, a, b) > r2) continue;
+    const meta = ensureConstraintMeta(c);
+    return { id: meta.id, constraint: c };
+  }
+  return null;
+}
+
+function setConstraintEndpointWorld(constraint: Matter.Constraint, endpoint: "A" | "B", worldPoint: WorldPoint) {
+  const body = endpoint === "A" ? constraint.bodyA : constraint.bodyB;
+  if (body) {
+    const point = { x: worldPoint.x - body.position.x, y: worldPoint.y - body.position.y };
+    if (endpoint === "A") {
+      constraint.pointA = point;
+      (constraint as any).angleA = body.angle;
+    } else {
+      constraint.pointB = point;
+      (constraint as any).angleB = body.angle;
+    }
+  } else if (endpoint === "A") {
+    constraint.pointA = { x: worldPoint.x, y: worldPoint.y };
+  } else {
+    constraint.pointB = { x: worldPoint.x, y: worldPoint.y };
+  }
+}
+
+function setConstraintEndpointAttachment(constraint: Matter.Constraint, endpoint: "A" | "B", body: Matter.Body | null, worldPoint: WorldPoint) {
+  const otherBody = endpoint === "A" ? constraint.bodyB : constraint.bodyA;
+  const attachBody = body && otherBody && body.id === otherBody.id ? null : body;
+
+  if (endpoint === "A") {
+    (constraint as any).bodyA = attachBody;
+    if (attachBody) {
+      constraint.pointA = { x: worldPoint.x - attachBody.position.x, y: worldPoint.y - attachBody.position.y };
+      (constraint as any).angleA = attachBody.angle;
+    } else {
+      constraint.pointA = { x: worldPoint.x, y: worldPoint.y };
+    }
+    return;
+  }
+
+  (constraint as any).bodyB = attachBody;
+  if (attachBody) {
+    constraint.pointB = { x: worldPoint.x - attachBody.position.x, y: worldPoint.y - attachBody.position.y };
+    (constraint as any).angleB = attachBody.angle;
+  } else {
+    constraint.pointB = { x: worldPoint.x, y: worldPoint.y };
+  }
+}
+
+function syncConstraintRestLengthToCurrent(constraint: Matter.Constraint) {
+  const meta = ensureConstraintMeta(constraint);
+  const a = getConstraintEndpointWorld(constraint, "A");
+  const b = getConstraintEndpointWorld(constraint, "B");
+  if (!a || !b) return;
+  const len = Math.hypot(a.x - b.x, a.y - b.y);
+  if (!Number.isFinite(len) || len <= 0) return;
+  meta.restLength = len;
+  constraint.length = len;
+  constraint.stiffness = meta.stiffness;
+  constraint.damping = meta.damping;
+}
+
+function applyTensionOnlyConstraints(engine: Matter.Engine) {
+  const constraints = Matter.Composite.allConstraints(engine.world);
+  for (const c of constraints) {
+    const meta = getConstraintMeta(c);
+    if (!meta) continue;
+    if (meta.kind !== "rope" && meta.kind !== "rigid_rope") continue;
+    if (!Number.isFinite(meta.restLength) || meta.restLength <= 0) continue;
+    const a = getConstraintEndpointWorld(c, "A");
+    const b = getConstraintEndpointWorld(c, "B");
+    if (!a || !b) continue;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dist = Math.hypot(dx, dy);
+    if (!Number.isFinite(dist)) continue;
+
+    const max = meta.restLength;
+    const taut = dist > max + 1e-3;
+    if (taut) {
+      c.length = max;
+      c.stiffness = meta.stiffness;
+      c.damping = meta.damping;
+    } else {
+      c.length = Math.max(0, dist);
+      c.stiffness = 0;
+      c.damping = 0;
+    }
+  }
+}
+
+function createConstraintBetweenBodies(kind: ConstraintKind, a: Matter.Body, b: Matter.Body) {
+  const len = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+  const { stiffness, damping } =
+    kind === "rod"
+      ? { stiffness: 1, damping: 0 }
+      : kind === "spring"
+        ? { stiffness: 0.45, damping: 0.04 }
+        : kind === "rigid_rope"
+          ? { stiffness: 1, damping: 0 }
+          : { stiffness: 0.85, damping: 0 };
+
+  const constraint = Matter.Constraint.create({
     bodyA: a,
     pointA: { x: 0, y: 0 },
     bodyB: b,
     pointB: { x: 0, y: 0 },
     length: len,
-    stiffness: 0.03,
-    damping: 0.08
+    stiffness,
+    damping
   });
+  ensureConstraintMeta(constraint, {
+    kind,
+    label: kind === "rod" ? "Rod" : kind === "spring" ? "Spring" : kind === "rigid_rope" ? "Rigid Rope" : "Rope",
+    restLength: len,
+    stiffness,
+    damping
+  });
+  return constraint;
 }
 
-function createConstraintToPoint(tool: "rod" | "spring", a: Matter.Body, point: WorldPoint) {
+function createConstraintToPoint(kind: ConstraintKind, a: Matter.Body, point: WorldPoint) {
   const len = Math.hypot(a.position.x - point.x, a.position.y - point.y);
-  if (tool === "rod") {
-    return Matter.Constraint.create({ bodyA: a, pointA: { x: 0, y: 0 }, pointB: point, length: len, stiffness: 1 });
-  }
-  return Matter.Constraint.create({
+  const { stiffness, damping } =
+    kind === "rod"
+      ? { stiffness: 1, damping: 0 }
+      : kind === "spring"
+        ? { stiffness: 0.45, damping: 0.04 }
+        : kind === "rigid_rope"
+          ? { stiffness: 1, damping: 0 }
+          : { stiffness: 0.85, damping: 0 };
+
+  const constraint = Matter.Constraint.create({
     bodyA: a,
     pointA: { x: 0, y: 0 },
     pointB: point,
     length: len,
-    stiffness: 0.03,
-    damping: 0.08
+    stiffness,
+    damping
   });
+  ensureConstraintMeta(constraint, {
+    kind,
+    label: kind === "rod" ? "Rod" : kind === "spring" ? "Spring" : kind === "rigid_rope" ? "Rigid Rope" : "Rope",
+    restLength: len,
+    stiffness,
+    damping
+  });
+  return constraint;
 }
 
 function addRopeChain(a: Matter.Body, b: Matter.Body) {

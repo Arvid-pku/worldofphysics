@@ -30,7 +30,8 @@ export const en = {
   "tool.rectangle": "Rectangle",
   "tool.polygon": "Polygon",
   "tool.rod": "Rigid Rod",
-  "tool.rope": "Rope (Chain)",
+  "tool.rope": "Rope",
+  "tool.rigidRope": "Rigid Rope",
   "tool.spring": "Spring",
   "tool.wall": "Wall",
   "tool.slope": "Slope",
@@ -70,7 +71,7 @@ export const en = {
   "panel.collapse": "Collapse panel",
   "panel.expand": "Expand panel",
   "panel.clearSelection": "Clear",
-  "panel.emptyInspector": "Select a body or field to inspect.",
+  "panel.emptyInspector": "Select a body, constraint, or field to inspect.",
 
   "labs.open": "Labs",
   "labs.title": "Guided Labs",
@@ -135,6 +136,7 @@ export const en = {
 
   "inspector.title": "Inspector",
   "inspector.subtitleBody": "Body properties",
+  "inspector.subtitleConstraint": "Constraint properties",
   "inspector.subtitleField": "Field properties",
   "inspector.close": "Close",
 
@@ -198,6 +200,18 @@ export const en = {
   "graphs.empty": "Select a body to plot.",
   "graphs.metric": "Metric",
   "graphs.clear": "Clear"
+  ,
+  "constraint.notFound": "Constraint not found.",
+  "constraint.title": "Constraint",
+  "constraint.delete": "Delete constraint",
+  "constraint.kind": "Type",
+  "constraint.kind.rod": "Rod",
+  "constraint.kind.spring": "Spring",
+  "constraint.kind.rope": "Rope (tension-only)",
+  "constraint.kind.rigid_rope": "Rigid Rope (tension-only)",
+  "constraint.length": "Length",
+  "constraint.stiffness": "Stiffness",
+  "constraint.damping": "Damping"
 } as const;
 
 export const zh = {
@@ -232,7 +246,8 @@ export const zh = {
   "tool.rectangle": "矩形",
   "tool.polygon": "多边形",
   "tool.rod": "刚性杆",
-  "tool.rope": "绳子（链条）",
+  "tool.rope": "绳子",
+  "tool.rigidRope": "刚性绳",
   "tool.spring": "弹簧",
   "tool.wall": "墙",
   "tool.slope": "斜坡",
@@ -272,7 +287,7 @@ export const zh = {
   "panel.collapse": "收起面板",
   "panel.expand": "展开面板",
   "panel.clearSelection": "清除",
-  "panel.emptyInspector": "请选择一个物体或场区域以查看属性。",
+  "panel.emptyInspector": "请选择一个物体、约束或场区域以查看属性。",
 
   "labs.open": "实验",
   "labs.title": "引导实验",
@@ -337,6 +352,7 @@ export const zh = {
 
   "inspector.title": "属性面板",
   "inspector.subtitleBody": "物体属性",
+  "inspector.subtitleConstraint": "约束属性",
   "inspector.subtitleField": "场区域属性",
   "inspector.close": "关闭",
 
@@ -400,6 +416,18 @@ export const zh = {
   "graphs.empty": "选择一个物体以绘图。",
   "graphs.metric": "指标",
   "graphs.clear": "清除"
+  ,
+  "constraint.notFound": "未找到约束。",
+  "constraint.title": "约束",
+  "constraint.delete": "删除约束",
+  "constraint.kind": "类型",
+  "constraint.kind.rod": "刚性杆",
+  "constraint.kind.spring": "弹簧",
+  "constraint.kind.rope": "绳（只拉不推）",
+  "constraint.kind.rigid_rope": "刚性绳（只拉不推）",
+  "constraint.length": "长度",
+  "constraint.stiffness": "刚度",
+  "constraint.damping": "阻尼"
 } as const satisfies Record<keyof typeof en, string>;
 
 export const DICT = { en, zh } as const;
