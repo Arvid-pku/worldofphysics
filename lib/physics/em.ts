@@ -23,7 +23,6 @@ export function applyElectromagnetism(engine: Matter.Engine, fields: FieldRegion
 
   const charged: Array<{ body: Matter.Body; q: number }> = [];
   for (const body of bodies) {
-    if (body.isStatic) continue;
     const meta = getBodyMeta(body);
     if (!meta?.isCharged) continue;
     const q = meta.charge;
@@ -36,6 +35,7 @@ export function applyElectromagnetism(engine: Matter.Engine, fields: FieldRegion
     for (let j = i + 1; j < charged.length; j += 1) {
       const a = charged[i]!;
       const b = charged[j]!;
+      if (a.body.isStatic && b.body.isStatic) continue;
       const dx = a.body.position.x - b.body.position.x;
       const dy = a.body.position.y - b.body.position.y;
       const dist2 = dx * dx + dy * dy + COULOMB_SOFTENING * COULOMB_SOFTENING;
@@ -45,8 +45,8 @@ export function applyElectromagnetism(engine: Matter.Engine, fields: FieldRegion
       const fx = dx * invDist * forceMag;
       const fy = dy * invDist * forceMag;
       const f = clampForce({ x: fx, y: fy }, COULOMB_MAX_FORCE);
-      Matter.Body.applyForce(a.body, a.body.position, f);
-      Matter.Body.applyForce(b.body, b.body.position, { x: -f.x, y: -f.y });
+      if (!a.body.isStatic) Matter.Body.applyForce(a.body, a.body.position, f);
+      if (!b.body.isStatic) Matter.Body.applyForce(b.body, b.body.position, { x: -f.x, y: -f.y });
     }
   }
 
@@ -54,6 +54,7 @@ export function applyElectromagnetism(engine: Matter.Engine, fields: FieldRegion
 
   // Field regions
   for (const { body, q } of charged) {
+    if (body.isStatic) continue;
     for (const field of fields) {
       if (!isPointInField(field, body.position)) continue;
 
@@ -77,4 +78,3 @@ export function applyElectromagnetism(engine: Matter.Engine, fields: FieldRegion
     }
   }
 }
-

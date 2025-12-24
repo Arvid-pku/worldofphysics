@@ -323,6 +323,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
             unit="C"
           />
+          <div className="text-[11px] text-slate-500">{t("em.chargeHint")}</div>
 
           <label className="grid gap-1">
             <div className="text-xs text-slate-400">{t("em.distribution")}</div>
