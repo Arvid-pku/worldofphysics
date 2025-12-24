@@ -148,20 +148,28 @@ function LabeledSlider({
 function Toggle({
   label,
   checked,
-  onChange
+  onChange,
+  disabled
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2">
+    <label
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2",
+        disabled ? "pointer-events-none opacity-40" : ""
+      )}
+    >
       <span className="text-xs text-slate-300">{label}</span>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 accent-blue-500"
+        disabled={disabled}
       />
     </label>
   );
@@ -169,7 +177,14 @@ function Toggle({
 
 export function BodyInspector({ bodyId }: { bodyId: string }) {
   const { t } = useI18n();
-  const { engineRef, commitBodyStateChange } = useSandbox();
+  const {
+    engineRef,
+    commitBodyStateChange,
+    referenceFrameBodyId,
+    setReferenceFrameBodyId,
+    referenceFrameFollow,
+    setReferenceFrameFollow
+  } = useSandbox();
 
   const body = useMemo(() => {
     const engine = engineRef.current;
@@ -267,6 +282,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
   const glowClass =
     glow && Number(charge) > 0 ? "shadow-glowBlue border-blue-500/30" : glow ? "shadow-glowRed border-red-500/30" : "";
 
+  const isFrame = referenceFrameBodyId === bodyId;
+
   return (
     <div>
       <div className={cn("rounded-xl border border-slate-800/70 bg-slate-950/40 p-3", glowClass)}>
@@ -283,6 +300,29 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           className="mt-1 h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
         />
       </div>
+
+      <Section title={t("section.referenceFrame")}>
+        <div className="grid gap-3">
+          <Toggle
+            label={t("frame.useAsFrame")}
+            checked={isFrame}
+            onChange={(v) => {
+              if (v) {
+                setReferenceFrameBodyId(bodyId);
+              } else {
+                setReferenceFrameBodyId(null);
+                setReferenceFrameFollow(false);
+              }
+            }}
+          />
+          <Toggle
+            label={t("frame.follow")}
+            checked={isFrame && referenceFrameFollow}
+            disabled={!isFrame}
+            onChange={(v) => setReferenceFrameFollow(v)}
+          />
+        </div>
+      </Section>
 
       <Section title={t("section.triad")} icon={<Shield className="h-3.5 w-3.5" />}>
         <div className="grid grid-cols-3 gap-3">

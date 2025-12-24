@@ -144,6 +144,8 @@ export function SimulationCanvas() {
     showVelocityVectors,
     showTrails,
     setShowTrails,
+    referenceFrameBodyId,
+    referenceFrameFollow,
     rightPanelTab,
     setRightPanelTab,
     rightPanelCollapsed,
@@ -179,6 +181,8 @@ export function SimulationCanvas() {
   >(new Map());
   const contactNormalSumByBodyIdRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const trailsRef = useRef<Map<string, WorldPoint[]>>(new Map());
+  const frameOffsetRef = useRef<WorldPoint>({ x: 0, y: 0 });
+  const frameTrackingRef = useRef<{ active: boolean; id: string | null }>({ active: false, id: null });
   const measurementRef = useRef<Measurement | null>(null);
   const interactionRef = useRef<Interaction>({ kind: "none" });
   const lastPointerWorldRef = useRef<WorldPoint | null>(null);
@@ -243,6 +247,8 @@ export function SimulationCanvas() {
     showCollisionPoints,
     showVelocityVectors,
     showTrails,
+    referenceFrameBodyId,
+    referenceFrameFollow,
     showFbd: !rightPanelCollapsed && rightPanelTab === "fbd",
     fbdAxesMode,
     snapEnabled,
@@ -258,6 +264,8 @@ export function SimulationCanvas() {
       showCollisionPoints,
       showVelocityVectors,
       showTrails,
+      referenceFrameBodyId,
+      referenceFrameFollow,
       showFbd: !rightPanelCollapsed && rightPanelTab === "fbd",
       fbdAxesMode,
       snapEnabled,
@@ -269,6 +277,8 @@ export function SimulationCanvas() {
     isRunning,
     rightPanelCollapsed,
     rightPanelTab,
+    referenceFrameBodyId,
+    referenceFrameFollow,
     showCollisionPoints,
     showTrails,
     showVelocityVectors,
@@ -490,14 +500,27 @@ export function SimulationCanvas() {
               setHoveredBodyId(null);
               setHoverReadout(null);
             } else {
-              const dtMs = (body as any).deltaTime || engine.timing.lastDelta || BASE_DELTA_MS;
-              const v = worldVelocityStepToMps(Math.hypot(body.velocity.x, body.velocity.y), dtMs);
+              const dtMs = engine.timing.lastDelta || (body as any).deltaTime || BASE_DELTA_MS;
+              const vx = worldVelocityStepToMps(body.velocity.x, dtMs);
+              const vy = worldVelocityStepToMps(body.velocity.y, dtMs);
+              const v = Math.hypot(vx, vy);
               const ke = 0.5 * body.mass * v * v;
               const f = forceByBodyIdRef.current.get(hoveredId) ?? 0;
+              let velocityRel: number | undefined = undefined;
+              const frameId = settings.referenceFrameBodyId;
+              if (frameId) {
+                const frameBody = findBodyByMetaId(engine, frameId);
+                if (frameBody) {
+                  const fvx = worldVelocityStepToMps(frameBody.velocity.x, dtMs);
+                  const fvy = worldVelocityStepToMps(frameBody.velocity.y, dtMs);
+                  velocityRel = Math.hypot(vx - fvx, vy - fvy);
+                }
+              }
               setHoverReadout({
                 screenX: pointerScreen.x,
                 screenY: pointerScreen.y,
                 velocity: v,
+                velocityRel,
                 force: f,
                 kineticEnergy: ke
               });
@@ -573,6 +596,28 @@ export function SimulationCanvas() {
             lastFbdUpdateRef.current = now;
           }
         }
+      }
+
+      // Camera follow (reference frame)
+      const frameId = settings.referenceFrameBodyId;
+      if (settings.referenceFrameFollow && frameId) {
+        const frameBody = findBodyByMetaId(engine, frameId);
+        if (frameBody) {
+          const tracking = frameTrackingRef.current;
+          if (!tracking.active || tracking.id !== frameId) {
+            frameOffsetRef.current = {
+              x: cameraRef.current.x - frameBody.position.x,
+              y: cameraRef.current.y - frameBody.position.y
+            };
+          }
+          cameraRef.current.x = frameBody.position.x + frameOffsetRef.current.x;
+          cameraRef.current.y = frameBody.position.y + frameOffsetRef.current.y;
+          frameTrackingRef.current = { active: true, id: frameId };
+        } else {
+          frameTrackingRef.current = { active: false, id: frameId };
+        }
+      } else {
+        frameTrackingRef.current = { active: false, id: frameId ?? null };
       }
 
       // Render
@@ -1328,16 +1373,26 @@ export function SimulationCanvas() {
         const after = screenToWorld(mouse.x, mouse.y, rect);
         camera.x += before.x - after.x;
         camera.y += before.y - after.y;
-        return;
+      } else {
+        camera.x += e.deltaX / camera.zoom;
+        camera.y += e.deltaY / camera.zoom;
       }
 
-      camera.x += e.deltaX / camera.zoom;
-      camera.y += e.deltaY / camera.zoom;
+      const engine = engineRef.current;
+      const settings = settingsRef.current;
+      const frameId = settings.referenceFrameBodyId;
+      if (engine && settings.referenceFrameFollow && frameId) {
+        const frameBody = findBodyByMetaId(engine, frameId);
+        if (frameBody) {
+          frameOffsetRef.current = { x: camera.x - frameBody.position.x, y: camera.y - frameBody.position.y };
+          frameTrackingRef.current = { active: true, id: frameId };
+        }
+      }
     };
 
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
-  }, [screenToWorld]);
+  }, [engineRef, screenToWorld]);
 
   return (
     <div className="absolute inset-0">
@@ -1728,6 +1783,18 @@ export function SimulationCanvas() {
             const dy = y - interaction.startY;
             cameraRef.current.x = interaction.startCameraX - dx / cameraRef.current.zoom;
             cameraRef.current.y = interaction.startCameraY - dy / cameraRef.current.zoom;
+            const settings = settingsRef.current;
+            const frameId = settings.referenceFrameBodyId;
+            if (settings.referenceFrameFollow && frameId) {
+              const frameBody = findBodyByMetaId(engine, frameId);
+              if (frameBody) {
+                frameOffsetRef.current = {
+                  x: cameraRef.current.x - frameBody.position.x,
+                  y: cameraRef.current.y - frameBody.position.y
+                };
+                frameTrackingRef.current = { active: true, id: frameId };
+              }
+            }
             return;
           }
           if (interaction.kind === "measure_ruler" && interaction.pointerId === e.pointerId) {

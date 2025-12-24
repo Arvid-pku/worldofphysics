@@ -31,6 +31,10 @@ export type SandboxState = {
   setTimeScale: (value: number) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (value: boolean) => void;
+  referenceFrameBodyId: string | null;
+  setReferenceFrameBodyId: (value: string | null) => void;
+  referenceFrameFollow: boolean;
+  setReferenceFrameFollow: (value: boolean) => void;
   rightPanelTab: RightPanelTab;
   setRightPanelTab: (value: RightPanelTab) => void;
   rightPanelCollapsed: boolean;
@@ -111,6 +115,8 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const [gravity, setGravity] = useState(9.8);
   const [timeScale, setTimeScale] = useState(1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [referenceFrameBodyId, setReferenceFrameBodyId] = useState<string | null>(null);
+  const [referenceFrameFollow, setReferenceFrameFollow] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("inspector");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
@@ -540,6 +546,8 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
     stepRequestedRef.current = false;
     clearSelection();
     setFields([]);
+    setReferenceFrameBodyId(null);
+    setReferenceFrameFollow(false);
     clipboardRef.current = null;
     clearHistory();
     setResetNonce((v) => v + 1);
@@ -586,6 +594,10 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setTimeScale,
       sidebarCollapsed,
       setSidebarCollapsed,
+      referenceFrameBodyId,
+      setReferenceFrameBodyId,
+      referenceFrameFollow,
+      setReferenceFrameFollow,
       rightPanelTab,
       setRightPanelTab,
       rightPanelCollapsed,
@@ -662,6 +674,8 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       isRunning,
       paste,
       sidebarCollapsed,
+      referenceFrameBodyId,
+      referenceFrameFollow,
       rightPanelCollapsed,
       rightPanelTab,
       requestReset,

@@ -47,7 +47,7 @@ function fmt(n: number) {
 
 export function GraphsPanel() {
   const { t } = useI18n();
-  const { engineRef, selected, gravity } = useSandbox();
+  const { engineRef, selected, gravity, referenceFrameBodyId } = useSandbox();
 
   const bodyId = selected.kind === "body" ? selected.id : null;
 
@@ -79,7 +79,7 @@ export function GraphsPanel() {
   useEffect(() => {
     samplesRef.current = [];
     lastRef.current = null;
-  }, [bodyId]);
+  }, [bodyId, referenceFrameBodyId]);
 
   useEffect(() => {
     let raf = 0;
@@ -99,8 +99,22 @@ export function GraphsPanel() {
       }
 
       const dtMs = engine.timing.lastDelta || 1000 / 60;
-      const vx = worldVelocityStepToMps(body.velocity.x, dtMs);
-      const vy = worldVelocityStepToMps(body.velocity.y, dtMs);
+      let frameX = 0;
+      let frameY = 0;
+      let frameVx = 0;
+      let frameVy = 0;
+      if (referenceFrameBodyId) {
+        const frameBody = findBodyByMetaId(engine, referenceFrameBodyId);
+        if (frameBody) {
+          frameX = frameBody.position.x;
+          frameY = frameBody.position.y;
+          frameVx = worldVelocityStepToMps(frameBody.velocity.x, dtMs);
+          frameVy = worldVelocityStepToMps(frameBody.velocity.y, dtMs);
+        }
+      }
+
+      const vx = worldVelocityStepToMps(body.velocity.x, dtMs) - frameVx;
+      const vy = worldVelocityStepToMps(body.velocity.y, dtMs) - frameVy;
 
       const last = lastRef.current;
       const dtSec = last ? (now - last.timeMs) / 1000 : 0;
@@ -109,8 +123,8 @@ export function GraphsPanel() {
       const accel = Math.hypot(ax, ay);
 
       const speed = Math.hypot(vx, vy);
-      const x = worldToMeters(body.position.x);
-      const y = worldToMeters(body.position.y);
+      const x = worldToMeters(body.position.x - frameX);
+      const y = worldToMeters(body.position.y - frameY);
 
       const ke = 0.5 * body.mass * speed * speed;
       const pe = body.mass * gravity * -y;
@@ -131,7 +145,7 @@ export function GraphsPanel() {
 
     raf = window.requestAnimationFrame(loop);
     return () => window.cancelAnimationFrame(raf);
-  }, [bodyId, engineRef, gravity]);
+  }, [bodyId, engineRef, gravity, referenceFrameBodyId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

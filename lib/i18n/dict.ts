@@ -129,6 +129,7 @@ export const en = {
   "fbd.force.friction": "Friction",
 
   "hover.velocity": "Velocity",
+  "hover.velocityRel": "Velocity (rel)",
   "hover.force": "Force |F|",
   "hover.kineticEnergy": "Kinetic Energy",
 
@@ -161,6 +162,9 @@ export const en = {
 
   "section.kinematics": "Kinematics",
   "section.conveyor": "Conveyor",
+  "section.referenceFrame": "Reference Frame",
+  "frame.useAsFrame": "Use as reference frame",
+  "frame.follow": "Follow with camera",
   "conveyor.enabled": "Enabled",
   "conveyor.speed": "Speed (m/s)",
   "conveyor.grip": "Grip",
@@ -327,6 +331,7 @@ export const zh = {
   "fbd.force.friction": "摩擦力",
 
   "hover.velocity": "速度",
+  "hover.velocityRel": "相对速度",
   "hover.force": "合力 |F|",
   "hover.kineticEnergy": "动能",
 
@@ -359,6 +364,9 @@ export const zh = {
 
   "section.kinematics": "运动学",
   "section.conveyor": "传送带",
+  "section.referenceFrame": "参考系",
+  "frame.useAsFrame": "设为参考系",
+  "frame.follow": "相机跟随",
   "conveyor.enabled": "启用",
   "conveyor.speed": "速度 (m/s)",
   "conveyor.grip": "抓地力",

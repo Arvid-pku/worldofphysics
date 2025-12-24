@@ -22,6 +22,12 @@ export function HoverTooltip() {
         <span className="text-slate-400">{t("hover.velocity")}</span>
         <span className="tabular-nums">{hoverReadout.velocity.toFixed(2)} m/s</span>
       </div>
+      {hoverReadout.velocityRel !== undefined ? (
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-slate-400">{t("hover.velocityRel")}</span>
+          <span className="tabular-nums">{hoverReadout.velocityRel.toFixed(2)} m/s</span>
+        </div>
+      ) : null}
       <div className="mt-1 flex items-center justify-between">
         <span className="text-slate-400">{t("hover.force")}</span>
         <span className="tabular-nums">{hoverReadout.force.toFixed(2)} N</span>
