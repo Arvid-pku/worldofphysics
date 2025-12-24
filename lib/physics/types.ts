@@ -1,6 +1,8 @@
 export type ToolId =
   | "select"
   | "pan"
+  | "ruler"
+  | "protractor"
   | "circle"
   | "rectangle"
   | "polygon"

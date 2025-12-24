@@ -3,11 +3,13 @@
 import {
   Cable,
   Circle,
+  DraftingCompass,
   Hand,
   Link2,
   Magnet,
   MoveRight,
   MousePointer2,
+  Ruler,
   Spline,
   Square,
   Triangle,
@@ -85,6 +87,11 @@ export function Sidebar() {
         <Section title={t("sidebar.section.navigate")}>
           <ToolButton id="select" label={t("tool.select")} icon={<MousePointer2 className="h-4 w-4" />} />
           <ToolButton id="pan" label={t("tool.pan")} icon={<Hand className="h-4 w-4" />} />
+        </Section>
+
+        <Section title={t("sidebar.section.measure")}>
+          <ToolButton id="ruler" label={t("tool.ruler")} icon={<Ruler className="h-4 w-4" />} />
+          <ToolButton id="protractor" label={t("tool.protractor")} icon={<DraftingCompass className="h-4 w-4" />} />
         </Section>
 
         <Section title={t("sidebar.section.shapes")}>

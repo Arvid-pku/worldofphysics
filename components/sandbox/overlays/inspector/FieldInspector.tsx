@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Magnet, Trash2, Zap } from "lucide-react";
 
 import { useI18n } from "@/components/i18n/I18nProvider";
@@ -30,11 +30,15 @@ function LabeledNumber({
   label,
   value,
   onChange,
+  onFocus,
+  onBlur,
   unit
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   unit?: string;
 }) {
   return (
@@ -46,6 +50,8 @@ function LabeledNumber({
       <input
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(Number(e.target.value))}
+        onFocus={onFocus}
+        onBlur={onBlur}
         inputMode="decimal"
         className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
       />
@@ -60,6 +66,8 @@ function LabeledSlider({
   max,
   step,
   onChange,
+  onPointerDown,
+  onPointerUp,
   unit
 }: {
   label: string;
@@ -68,6 +76,8 @@ function LabeledSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
   unit?: string;
 }) {
   return (
@@ -86,6 +96,8 @@ function LabeledSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
         className="h-2 w-full cursor-pointer accent-blue-500"
       />
     </div>
@@ -98,10 +110,25 @@ function updateField(prev: FieldRegion[], next: FieldRegion) {
 
 export function FieldInspector({ fieldId }: { fieldId: string }) {
   const { t } = useI18n();
-  const { fields, setFields, deleteFieldById } = useSandbox();
+  const { fields, setFields, deleteFieldById, commitFieldChange } = useSandbox();
 
   const field = useMemo(() => fields.find((f) => f.id === fieldId) ?? null, [fieldId, fields]);
   const [angleDeg, setAngleDeg] = useState(0);
+  const editStartRef = useRef<FieldRegion | null>(null);
+
+  const beginEdit = () => {
+    if (!field) return;
+    editStartRef.current = { ...field } as FieldRegion;
+  };
+
+  const commitEdit = () => {
+    if (!field) return;
+    const before = editStartRef.current;
+    if (!before) return;
+    editStartRef.current = null;
+    const after = { ...field } as FieldRegion;
+    commitFieldChange({ fieldId: field.id, before, after });
+  };
 
   useEffect(() => {
     if (!field || field.kind !== "electric") return;
@@ -155,17 +182,21 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               label={t("region.width")}
               unit="m"
               value={worldToMeters(field.width ?? 0)}
+              onFocus={beginEdit}
               onChange={(v) =>
                 setFields((prev) => updateField(prev, { ...field, width: Math.max(40, metersToWorld(v)) }))
               }
+              onBlur={commitEdit}
             />
             <LabeledNumber
               label={t("region.height")}
               unit="m"
               value={worldToMeters(field.height ?? 0)}
+              onFocus={beginEdit}
               onChange={(v) =>
                 setFields((prev) => updateField(prev, { ...field, height: Math.max(40, metersToWorld(v)) }))
               }
+              onBlur={commitEdit}
             />
           </div>
         ) : (
@@ -173,9 +204,11 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
             label={t("region.radius")}
             unit="m"
             value={worldToMeters(field.radius ?? 0)}
+            onFocus={beginEdit}
             onChange={(v) =>
               setFields((prev) => updateField(prev, { ...field, radius: Math.max(24, metersToWorld(v)) }))
             }
+            onBlur={commitEdit}
           />
         )}
       </Section>
@@ -190,7 +223,9 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               max={5}
               step={0.01}
               unit="N/C"
+              onPointerDown={beginEdit}
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, magnitude: v }))}
+              onPointerUp={commitEdit}
             />
 
             <div className="grid grid-cols-2 gap-3">
@@ -198,12 +233,14 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
                 label={t("field.direction")}
                 unit="°"
                 value={angleDeg}
+                onFocus={beginEdit}
                 onChange={(v) => {
                   const clamped = clamp(v, -360, 360);
                   setAngleDeg(clamped);
                   const rad = normalizeAngleRad((clamped * Math.PI) / 180);
                   setFields((prev) => updateField(prev, { ...field, directionRad: rad }));
                 }}
+                onBlur={commitEdit}
               />
               <button
                 type="button"
@@ -228,8 +265,10 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
                   key={p.deg}
                   type="button"
                   onClick={() => {
+                    const before = { ...field } as FieldRegion;
+                    const after = { ...field, directionRad: (p.deg * Math.PI) / 180 } as FieldRegion;
                     setAngleDeg(p.deg);
-                    setFields((prev) => updateField(prev, { ...field, directionRad: (p.deg * Math.PI) / 180 }));
+                    commitFieldChange({ fieldId: field.id, before, after });
                   }}
                   className="h-9 rounded-md border border-slate-800 bg-slate-950/40 text-sm text-slate-200 hover:bg-slate-900/50"
                 >
@@ -249,7 +288,9 @@ export function FieldInspector({ fieldId }: { fieldId: string }) {
               max={5}
               step={0.01}
               unit="T"
+              onPointerDown={beginEdit}
               onChange={(v) => setFields((prev) => updateField(prev, { ...field, strength: v }))}
+              onPointerUp={commitEdit}
             />
             <div className="text-[11px] text-slate-500">
               {t("field.bHint")}

@@ -6,6 +6,7 @@ export const en = {
   "sidebar.title": "Physics Sandbox",
   "sidebar.subtitle": "Mechanics + E/M",
   "sidebar.section.navigate": "Navigate",
+  "sidebar.section.measure": "Measure",
   "sidebar.section.shapes": "Shapes",
   "sidebar.section.constraints": "Constraints",
   "sidebar.section.statics": "Statics",
@@ -19,6 +20,8 @@ export const en = {
 
   "tool.select": "Select",
   "tool.pan": "Pan / Orbit",
+  "tool.ruler": "Ruler",
+  "tool.protractor": "Protractor",
   "tool.circle": "Circle",
   "tool.rectangle": "Rectangle",
   "tool.polygon": "Polygon",
@@ -42,6 +45,10 @@ export const en = {
   "controls.timeScale": "Time Scale",
   "controls.vectors": "Vectors",
   "controls.collisions": "Collisions",
+  "controls.trails": "Trails",
+  "controls.graphs": "Graphs",
+  "controls.snap": "Snap",
+  "controls.snapStep": "Snap Step",
   "controls.timeHint": "0 = freeze, 1 = realtime",
 
   "hover.velocity": "Velocity",
@@ -105,7 +112,11 @@ export const en = {
   "field.direction": "Direction (deg)",
   "field.fromField": "From Field",
   "field.bField": "B (out/in of screen)",
-  "field.bHint": "Positive = out of screen (•), negative = into screen (×)."
+  "field.bHint": "Positive = out of screen (•), negative = into screen (×).",
+  "graphs.title": "Graphs",
+  "graphs.empty": "Select a body to plot.",
+  "graphs.metric": "Metric",
+  "graphs.clear": "Clear"
 } as const;
 
 export const zh = {
@@ -116,6 +127,7 @@ export const zh = {
   "sidebar.title": "物理沙盒",
   "sidebar.subtitle": "力学 + 电磁学",
   "sidebar.section.navigate": "导航",
+  "sidebar.section.measure": "测量",
   "sidebar.section.shapes": "形状",
   "sidebar.section.constraints": "约束",
   "sidebar.section.statics": "静态物体",
@@ -129,6 +141,8 @@ export const zh = {
 
   "tool.select": "选择",
   "tool.pan": "平移 / 拖动画布",
+  "tool.ruler": "直尺",
+  "tool.protractor": "量角器",
   "tool.circle": "圆",
   "tool.rectangle": "矩形",
   "tool.polygon": "多边形",
@@ -152,6 +166,10 @@ export const zh = {
   "controls.timeScale": "时间倍率",
   "controls.vectors": "速度矢量",
   "controls.collisions": "碰撞点",
+  "controls.trails": "轨迹",
+  "controls.graphs": "曲线",
+  "controls.snap": "吸附",
+  "controls.snapStep": "吸附步长",
   "controls.timeHint": "0 = 冻结，1 = 实时",
 
   "hover.velocity": "速度",
@@ -215,7 +233,11 @@ export const zh = {
   "field.direction": "方向 (度)",
   "field.fromField": "从当前值读取",
   "field.bField": "B（出/入屏幕）",
-  "field.bHint": "正值=出屏幕(•)，负值=入屏幕(×)。"
+  "field.bHint": "正值=出屏幕(•)，负值=入屏幕(×)。",
+  "graphs.title": "曲线",
+  "graphs.empty": "选择一个物体以绘图。",
+  "graphs.metric": "指标",
+  "graphs.clear": "清除"
 } as const satisfies Record<keyof typeof en, string>;
 
 export const DICT = { en, zh } as const;

@@ -83,6 +83,14 @@ export function TopControls() {
     setShowVelocityVectors,
     showCollisionPoints,
     setShowCollisionPoints,
+    showTrails,
+    setShowTrails,
+    showGraphs,
+    setShowGraphs,
+    snapEnabled,
+    setSnapEnabled,
+    snapStepMeters,
+    setSnapStepMeters,
     requestReset,
     requestStep
   } = useSandbox();
@@ -137,6 +145,48 @@ export function TopControls() {
             className="h-4 w-4 accent-blue-500"
           />
           {t("controls.collisions")}
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={showTrails}
+            onChange={(e) => setShowTrails(e.target.checked)}
+            className="h-4 w-4 accent-blue-500"
+          />
+          {t("controls.trails")}
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={showGraphs}
+            onChange={(e) => setShowGraphs(e.target.checked)}
+            className="h-4 w-4 accent-blue-500"
+          />
+          {t("controls.graphs")}
+        </label>
+        <div className="mx-2 h-8 w-px bg-slate-800" />
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={snapEnabled}
+            onChange={(e) => setSnapEnabled(e.target.checked)}
+            className="h-4 w-4 accent-blue-500"
+          />
+          {t("controls.snap")}
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-xs text-slate-300">
+          <span className="text-slate-400">{t("controls.snapStep")}</span>
+          <select
+            value={snapStepMeters}
+            onChange={(e) => setSnapStepMeters(Number(e.target.value))}
+            className="h-7 rounded border border-slate-800 bg-slate-950/60 px-1 text-xs text-slate-200 outline-none"
+            disabled={!snapEnabled}
+          >
+            <option value={0.1}>0.10 m</option>
+            <option value={0.25}>0.25 m</option>
+            <option value={0.5}>0.50 m</option>
+            <option value={1}>1.00 m</option>
+          </select>
         </label>
         <div className="text-[11px] text-slate-500">{t("controls.timeHint")}</div>
       </div>

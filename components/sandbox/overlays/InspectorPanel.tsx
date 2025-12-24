@@ -9,7 +9,7 @@ import { FieldInspector } from "@/components/sandbox/overlays/inspector/FieldIns
 
 export function InspectorPanel() {
   const { t } = useI18n();
-  const { selected, setSelected } = useSandbox();
+  const { selected, clearSelection } = useSandbox();
 
   if (selected.kind === "none") return null;
 
@@ -26,7 +26,7 @@ export function InspectorPanel() {
           <button
             type="button"
             title={t("inspector.close")}
-            onClick={() => setSelected({ kind: "none" })}
+            onClick={clearSelection}
             className="grid h-9 w-9 place-items-center rounded-md border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-900/50"
           >
             <X className="h-4 w-4" />

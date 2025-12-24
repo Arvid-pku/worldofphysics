@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as Matter from "matter-js";
 import { MoveRight, RotateCw, Shield, Zap } from "lucide-react";
 
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
 import { ensureBodyMeta, findBodyByMetaId } from "@/lib/physics/bodyMeta";
+import { captureBodyState } from "@/lib/physics/bodyState";
 import { ensureConveyorMeta, getConveyorMeta, setConveyorMeta } from "@/lib/physics/conveyor";
 import type { ChargeDistribution } from "@/lib/physics/types";
 import {
@@ -70,11 +71,15 @@ function LabeledNumber({
   label,
   value,
   onChange,
+  onFocus,
+  onBlur,
   unit
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   unit?: string;
 }) {
   return (
@@ -86,6 +91,8 @@ function LabeledNumber({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         inputMode="decimal"
         className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
       />
@@ -100,6 +107,8 @@ function LabeledSlider({
   max,
   step,
   onChange,
+  onPointerDown,
+  onPointerUp,
   unit
 }: {
   label: string;
@@ -108,6 +117,8 @@ function LabeledSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
   unit?: string;
 }) {
   return (
@@ -126,6 +137,8 @@ function LabeledSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
         className="h-2 w-full cursor-pointer accent-blue-500"
       />
     </div>
@@ -156,7 +169,7 @@ function Toggle({
 
 export function BodyInspector({ bodyId }: { bodyId: string }) {
   const { t } = useI18n();
-  const { engineRef } = useSandbox();
+  const { engineRef, commitBodyStateChange } = useSandbox();
 
   const body = useMemo(() => {
     const engine = engineRef.current;
@@ -182,6 +195,25 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
   const [conveyorEnabled, setConveyorEnabled] = useState(false);
   const [conveyorSpeed, setConveyorSpeed] = useState(2);
   const [conveyorGrip, setConveyorGrip] = useState(0.28);
+
+  const editStartRef = useRef<ReturnType<typeof captureBodyState> | null>(null);
+  const beginPropsEdit = () => {
+    if (!body) return;
+    editStartRef.current = captureBodyState(body);
+  };
+  const commitPropsEdit = () => {
+    if (!body) return;
+    const before = editStartRef.current;
+    if (!before) return;
+    editStartRef.current = null;
+    const after = captureBodyState(body);
+    commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
+  };
+  const commitKinematicsEdit = (before: ReturnType<typeof captureBodyState>) => {
+    if (!body) return;
+    const after = captureBodyState(body);
+    commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: true } });
+  };
 
   useEffect(() => {
     if (!body) return;
@@ -241,20 +273,43 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
         <div className="text-xs text-slate-500">{t("body.label")}</div>
         <input
           value={label}
+          onFocus={beginPropsEdit}
           onChange={(e) => {
             const v = e.target.value;
             setLabel(v);
             meta.label = v;
           }}
+          onBlur={commitPropsEdit}
           className="mt-1 h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
         />
       </div>
 
       <Section title={t("section.triad")} icon={<Shield className="h-3.5 w-3.5" />}>
         <div className="grid grid-cols-3 gap-3">
-          <LabeledNumber label={t("triad.mass")} unit="kg" value={triad.mass} onChange={(v) => onTriadChange("mass", v)} />
-          <LabeledNumber label={t("triad.density")} unit="kg/m³" value={triad.density} onChange={(v) => onTriadChange("density", v)} />
-          <LabeledNumber label={t("triad.volume")} unit="m³" value={triad.volume} onChange={(v) => onTriadChange("volume", v)} />
+          <LabeledNumber
+            label={t("triad.mass")}
+            unit="kg"
+            value={triad.mass}
+            onChange={(v) => onTriadChange("mass", v)}
+            onFocus={beginPropsEdit}
+            onBlur={commitPropsEdit}
+          />
+          <LabeledNumber
+            label={t("triad.density")}
+            unit="kg/m³"
+            value={triad.density}
+            onChange={(v) => onTriadChange("density", v)}
+            onFocus={beginPropsEdit}
+            onBlur={commitPropsEdit}
+          />
+          <LabeledNumber
+            label={t("triad.volume")}
+            unit="m³"
+            value={triad.volume}
+            onChange={(v) => onTriadChange("volume", v)}
+            onFocus={beginPropsEdit}
+            onBlur={commitPropsEdit}
+          />
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           {t("triad.tip")}
@@ -270,6 +325,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             max={1}
             step={0.01}
             unit="—"
+            onPointerDown={beginPropsEdit}
+            onPointerUp={commitPropsEdit}
             onChange={(v) => {
               setRestitution(v);
               body.restitution = v;
@@ -282,6 +339,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             max={1}
             step={0.01}
             unit="—"
+            onPointerDown={beginPropsEdit}
+            onPointerUp={commitPropsEdit}
             onChange={(v) => {
               setFriction(v);
               body.friction = v;
@@ -294,6 +353,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             max={1}
             step={0.01}
             unit="—"
+            onPointerDown={beginPropsEdit}
+            onPointerUp={commitPropsEdit}
             onChange={(v) => {
               setFrictionStatic(v);
               body.frictionStatic = v;
@@ -308,8 +369,11 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             label={t("em.isCharged")}
             checked={isCharged}
             onChange={(v) => {
+              const before = captureBodyState(body);
               setIsCharged(v);
               meta.isCharged = v;
+              const after = captureBodyState(body);
+              commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
             }}
           />
 
@@ -322,6 +386,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               meta.charge = q ?? 0;
             }}
             unit="C"
+            onFocus={beginPropsEdit}
+            onBlur={commitPropsEdit}
           />
           <div className="text-[11px] text-slate-500">{t("em.chargeHint")}</div>
 
@@ -330,9 +396,12 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             <select
               value={distribution}
               onChange={(e) => {
+                const before = captureBodyState(body);
                 const v = e.target.value as ChargeDistribution;
                 setDistribution(v);
                 meta.chargeDistribution = v;
+                const after = captureBodyState(body);
+                commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
               }}
               className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
             >
@@ -353,6 +422,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           <button
             type="button"
             onClick={() => {
+              const before = captureBodyState(body);
               const vx = parseNum(velX);
               const vy = parseNum(velY);
               const w = parseNum(angVel);
@@ -360,6 +430,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
                 Matter.Body.setVelocity(body, { x: mpsToWorldVelocityBaseStep(vx), y: mpsToWorldVelocityBaseStep(vy) });
               }
               if (w !== null) Matter.Body.setAngularVelocity(body, radpsToWorldAngularVelocityBaseStep(w));
+              commitKinematicsEdit(before);
             }}
             className="h-9 flex-1 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
           >
@@ -368,11 +439,13 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
           <button
             type="button"
             onClick={() => {
+              const before = captureBodyState(body);
               setVelX("0");
               setVelY("0");
               setAngVel("0");
               Matter.Body.setVelocity(body, { x: 0, y: 0 });
               Matter.Body.setAngularVelocity(body, 0);
+              commitKinematicsEdit(before);
             }}
             className="h-9 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
           >
@@ -387,6 +460,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             label={t("conveyor.enabled")}
             checked={conveyorEnabled}
             onChange={(v) => {
+              const before = captureBodyState(body);
               setConveyorEnabled(v);
               if (v) {
                 if (!body.isStatic) Matter.Body.setStatic(body, true);
@@ -396,6 +470,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               } else {
                 setConveyorMeta(body, null);
               }
+              const after = captureBodyState(body);
+              commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
             }}
           />
 
@@ -407,6 +483,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               max={5}
               step={0.01}
               unit="m/s"
+              onPointerDown={beginPropsEdit}
+              onPointerUp={commitPropsEdit}
               onChange={(v) => {
                 setConveyorSpeed(v);
                 if (conveyorEnabled) ensureConveyorMeta(body, { speed: v });
@@ -419,6 +497,8 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               max={1}
               step={0.01}
               unit="—"
+              onPointerDown={beginPropsEdit}
+              onPointerUp={commitPropsEdit}
               onChange={(v) => {
                 setConveyorGrip(v);
                 if (conveyorEnabled) ensureConveyorMeta(body, { grip: v });

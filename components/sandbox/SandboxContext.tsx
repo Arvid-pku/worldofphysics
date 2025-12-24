@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef, useStat
 import * as Matter from "matter-js";
 
 import { findBodyByMetaId, getBodyMeta } from "@/lib/physics/bodyMeta";
+import { applyBodyState, type ApplyBodyStateOptions, type BodyState } from "@/lib/physics/bodyState";
 import { getBodyRopeGroup, getConstraintRopeGroup } from "@/lib/physics/bodyShape";
 import { createBodyFromSnapshot, snapshotBody, type BodySnapshot } from "@/lib/physics/snapshot";
 import type { FieldRegion, HoverReadout, SelectedEntity, ToolId } from "@/lib/physics/types";
@@ -13,6 +14,7 @@ type WorldPoint = { x: number; y: number };
 
 type EditorClipboard =
   | { kind: "body"; snapshot: BodySnapshot }
+  | { kind: "bodies"; snapshots: BodySnapshot[] }
   | { kind: "field"; field: FieldRegion }
   | null;
 
@@ -31,12 +33,24 @@ export type SandboxState = {
   setShowVelocityVectors: (value: boolean) => void;
   showCollisionPoints: boolean;
   setShowCollisionPoints: (value: boolean) => void;
+  showTrails: boolean;
+  setShowTrails: (value: boolean) => void;
+  showGraphs: boolean;
+  setShowGraphs: (value: boolean) => void;
+  snapEnabled: boolean;
+  setSnapEnabled: (value: boolean) => void;
+  snapStepMeters: number;
+  setSnapStepMeters: (value: number) => void;
   tool: ToolId;
   setTool: (tool: ToolId) => void;
   fields: FieldRegion[];
   setFields: React.Dispatch<React.SetStateAction<FieldRegion[]>>;
   selected: SelectedEntity;
-  setSelected: (sel: SelectedEntity) => void;
+  selectedBodyIds: string[];
+  selectBody: (bodyId: string, opts?: { additive?: boolean; toggle?: boolean }) => void;
+  setSelectedBodies: (bodyIds: string[], opts?: { primaryId?: string | null }) => void;
+  selectField: (fieldId: string) => void;
+  clearSelection: () => void;
   hoveredBodyId: string | null;
   setHoveredBodyId: (id: string | null) => void;
   hoverReadout: HoverReadout | null;
@@ -52,6 +66,8 @@ export type SandboxState = {
   duplicateSelected: () => void;
   undo: () => void;
   redo: () => void;
+  commitBodyStateChange: (payload: { bodyId: string; before: BodyState; after: BodyState; apply?: ApplyBodyStateOptions }) => void;
+  commitFieldChange: (payload: { fieldId: string; before: FieldRegion; after: FieldRegion }) => void;
   commitWorldAdd: (payload: {
     bodies?: Matter.Body[];
     constraints?: Matter.Constraint[];
@@ -76,9 +92,14 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const [timeScale, setTimeScale] = useState(1);
   const [showVelocityVectors, setShowVelocityVectors] = useState(false);
   const [showCollisionPoints, setShowCollisionPoints] = useState(true);
+  const [showTrails, setShowTrails] = useState(false);
+  const [showGraphs, setShowGraphs] = useState(false);
+  const [snapEnabled, setSnapEnabled] = useState(false);
+  const [snapStepMeters, setSnapStepMeters] = useState(0.25);
   const [tool, setTool] = useState<ToolId>("select");
   const [fields, setFields] = useState<FieldRegion[]>([]);
   const [selected, setSelected] = useState<SelectedEntity>({ kind: "none" });
+  const [selectedBodyIds, setSelectedBodyIds] = useState<string[]>([]);
   const [hoveredBodyId, setHoveredBodyId] = useState<string | null>(null);
   const [hoverReadout, setHoverReadout] = useState<HoverReadout | null>(null);
   const [resetNonce, setResetNonce] = useState(0);
@@ -133,10 +154,12 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
         redo: () => {
           addWorldObjects(bodies, constraints);
           setSelected(after);
+          setSelectedBodyIds(after.kind === "body" ? [after.id] : []);
         },
         undo: () => {
           removeWorldObjects(bodies, constraints);
           setSelected(before);
+          setSelectedBodyIds(before.kind === "body" ? [before.id] : []);
           setHoveredBodyId(null);
           setHoverReadout(null);
         }
@@ -158,10 +181,12 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
         redo: () => {
           setFields((prev) => [...prev, field]);
           setSelected(after);
+          setSelectedBodyIds([]);
         },
         undo: () => {
           setFields((prev) => prev.filter((f) => f.id !== field.id));
           setSelected(before);
+          setSelectedBodyIds(before.kind === "body" ? [before.id] : []);
         }
       };
 
@@ -183,6 +208,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
         redo: () => {
           setFields((prev) => prev.filter((f) => f.id !== fieldId));
           setSelected(after);
+          setSelectedBodyIds([]);
         },
         undo: () => {
           setFields((prev) => {
@@ -191,6 +217,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
             return next;
           });
           setSelected(before);
+          setSelectedBodyIds(before.kind === "body" ? [before.id] : []);
         }
       };
 
@@ -198,6 +225,94 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       pushHistory(action);
     },
     [fields, pushHistory, selected]
+  );
+
+  const selectBody = useCallback(
+    (bodyId: string, opts?: { additive?: boolean; toggle?: boolean }) => {
+      const additive = Boolean(opts?.additive);
+      const toggle = Boolean(opts?.toggle);
+      if (!additive) {
+        setSelected({ kind: "body", id: bodyId });
+        setSelectedBodyIds([bodyId]);
+        return;
+      }
+
+      setSelectedBodyIds((prev) => {
+        const next = new Set(prev);
+        if (toggle && next.has(bodyId)) next.delete(bodyId);
+        else next.add(bodyId);
+        const arr = Array.from(next);
+        if (arr.length === 0) {
+          setSelected({ kind: "none" });
+          return [];
+        }
+        if (arr.includes(bodyId)) setSelected({ kind: "body", id: bodyId });
+        else setSelected({ kind: "body", id: arr[arr.length - 1]! });
+        return arr;
+      });
+    },
+    []
+  );
+
+  const setSelectedBodies = useCallback((bodyIds: string[], opts?: { primaryId?: string | null }) => {
+    const unique = Array.from(new Set(bodyIds));
+    const primary = opts?.primaryId ?? unique[unique.length - 1] ?? null;
+    setSelectedBodyIds(unique);
+    if (!primary) {
+      setSelected({ kind: "none" });
+      return;
+    }
+    setSelected({ kind: "body", id: primary });
+  }, []);
+
+  const selectField = useCallback((fieldId: string) => {
+    setSelected({ kind: "field", id: fieldId });
+    setSelectedBodyIds([]);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelected({ kind: "none" });
+    setSelectedBodyIds([]);
+    setHoveredBodyId(null);
+    setHoverReadout(null);
+  }, []);
+
+  const commitBodyStateChange = useCallback(
+    (payload: { bodyId: string; before: BodyState; after: BodyState; apply?: ApplyBodyStateOptions }) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const { bodyId, before, after, apply } = payload;
+
+      const action: EditorAction = {
+        redo: () => {
+          const body = findBodyByMetaId(engine, bodyId);
+          if (!body) return;
+          applyBodyState(body, after, apply);
+        },
+        undo: () => {
+          const body = findBodyByMetaId(engine, bodyId);
+          if (!body) return;
+          applyBodyState(body, before, apply);
+        }
+      };
+
+      action.redo();
+      pushHistory(action);
+    },
+    [pushHistory]
+  );
+
+  const commitFieldChange = useCallback(
+    (payload: { fieldId: string; before: FieldRegion; after: FieldRegion }) => {
+      const { fieldId, before, after } = payload;
+      const action: EditorAction = {
+        redo: () => setFields((prev) => prev.map((f) => (f.id === fieldId ? after : f))),
+        undo: () => setFields((prev) => prev.map((f) => (f.id === fieldId ? before : f)))
+      };
+      action.redo();
+      pushHistory(action);
+    },
+    [pushHistory]
   );
 
   const deleteSelected = useCallback(() => {
@@ -209,28 +324,27 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (selected.kind !== "body") return;
-
-    const body = findBodyByMetaId(engine, selected.id);
-    if (!body) {
-      setSelected({ kind: "none" });
-      return;
-    }
-
     const allBodies = Matter.Composite.allBodies(engine.world);
     const allConstraints = Matter.Composite.allConstraints(engine.world);
-    const bodiesToRemove = new Set<Matter.Body>([body]);
+    const bodiesToRemove = new Set<Matter.Body>();
     const constraintsToRemove = new Set<Matter.Constraint>();
     const ropeGroups = new Set<string>();
 
-    const directBodyRope = getBodyRopeGroup(body);
-    if (directBodyRope) ropeGroups.add(directBodyRope);
+    const baseIds = selectedBodyIds.length > 0 ? selectedBodyIds : selected.kind === "body" ? [selected.id] : [];
+    if (baseIds.length === 0) return;
 
-    for (const c of allConstraints) {
-      if (c.bodyA?.id === body.id || c.bodyB?.id === body.id) {
-        constraintsToRemove.add(c);
-        const rg = getConstraintRopeGroup(c);
-        if (rg) ropeGroups.add(rg);
+    for (const id of baseIds) {
+      const body = findBodyByMetaId(engine, id);
+      if (!body) continue;
+      bodiesToRemove.add(body);
+      const directBodyRope = getBodyRopeGroup(body);
+      if (directBodyRope) ropeGroups.add(directBodyRope);
+      for (const c of allConstraints) {
+        if (c.bodyA?.id === body.id || c.bodyB?.id === body.id) {
+          constraintsToRemove.add(c);
+          const rg = getConstraintRopeGroup(c);
+          if (rg) ropeGroups.add(rg);
+        }
       }
     }
 
@@ -254,22 +368,37 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       redo: () => {
         removeWorldObjects(bodies, constraints);
         setSelected(after);
+        setSelectedBodyIds([]);
         setHoveredBodyId(null);
         setHoverReadout(null);
       },
       undo: () => {
         addWorldObjects(bodies, constraints);
         setSelected(before);
+        setSelectedBodyIds(before.kind === "body" ? [before.id] : []);
       }
     };
 
     action.redo();
     pushHistory(action);
-  }, [addWorldObjects, deleteFieldById, pushHistory, removeWorldObjects, selected]);
+  }, [addWorldObjects, deleteFieldById, pushHistory, removeWorldObjects, selected, selectedBodyIds]);
 
   const copySelected = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
+
+    if (selected.kind === "body" && selectedBodyIds.length > 1) {
+      const snaps: BodySnapshot[] = [];
+      for (const id of selectedBodyIds) {
+        const body = findBodyByMetaId(engine, id);
+        if (!body) continue;
+        const snap = snapshotBody(body);
+        if (!snap) continue;
+        snaps.push(snap);
+      }
+      if (snaps.length > 0) clipboardRef.current = { kind: "bodies", snapshots: snaps };
+      return;
+    }
 
     if (selected.kind === "body") {
       const body = findBodyByMetaId(engine, selected.id);
@@ -285,7 +414,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       if (!field) return;
       clipboardRef.current = { kind: "field", field: { ...field } as FieldRegion };
     }
-  }, [fields, selected]);
+  }, [fields, selected, selectedBodyIds]);
 
   const paste = useCallback(() => {
     const engine = engineRef.current;
@@ -308,6 +437,20 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (clip.kind === "bodies") {
+      const offset = cursor ? { x: cursor.x + 18, y: cursor.y + 18 } : defaultOffset;
+      const bodies: Matter.Body[] = [];
+      for (const snap of clip.snapshots) {
+        const body = createBodyFromSnapshot(snap, { offset });
+        bodies.push(body);
+      }
+      const last = bodies[bodies.length - 1] ?? null;
+      const id = last ? getBodyMeta(last)?.id ?? null : null;
+      if (!id) return;
+      commitWorldAdd({ bodies, selectionBefore: before, selectionAfter: { kind: "body", id } });
+      return;
+    }
+
     const field = clip.field;
     const id = createId("field");
     const next: FieldRegion = {
@@ -322,6 +465,24 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const duplicateSelected = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
+
+    if (selected.kind === "body" && selectedBodyIds.length > 1) {
+      const snaps: BodySnapshot[] = [];
+      for (const id of selectedBodyIds) {
+        const body = findBodyByMetaId(engine, id);
+        if (!body) continue;
+        const snap = snapshotBody(body);
+        if (!snap) continue;
+        snaps.push(snap);
+      }
+      if (snaps.length === 0) return;
+      const clones = snaps.map((snap) => createBodyFromSnapshot(snap, { offset: { x: 48, y: 48 } }));
+      const last = clones[clones.length - 1] ?? null;
+      const id = last ? getBodyMeta(last)?.id ?? null : null;
+      if (!id) return;
+      commitWorldAdd({ bodies: clones, selectionBefore: selected, selectionAfter: { kind: "body", id } });
+      return;
+    }
 
     if (selected.kind === "body") {
       const body = findBodyByMetaId(engine, selected.id);
@@ -342,7 +503,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       const next: FieldRegion = { ...field, id, x: field.x + 48, y: field.y + 48 } as FieldRegion;
       commitFieldAdd({ field: next, selectionBefore: selected, selectionAfter: { kind: "field", id } });
     }
-  }, [commitFieldAdd, commitWorldAdd, fields, selected]);
+  }, [commitFieldAdd, commitWorldAdd, fields, selected, selectedBodyIds]);
 
   const requestStep = useCallback(() => {
     stepRequestedRef.current = true;
@@ -350,14 +511,12 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
 
   const requestReset = useCallback(() => {
     stepRequestedRef.current = false;
-    setSelected({ kind: "none" });
-    setHoveredBodyId(null);
-    setHoverReadout(null);
+    clearSelection();
     setFields([]);
     clipboardRef.current = null;
     clearHistory();
     setResetNonce((v) => v + 1);
-  }, [clearHistory]);
+  }, [clearHistory, clearSelection]);
 
   const value = useMemo<SandboxState>(
     () => ({
@@ -373,12 +532,24 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setShowVelocityVectors,
       showCollisionPoints,
       setShowCollisionPoints,
+      showTrails,
+      setShowTrails,
+      showGraphs,
+      setShowGraphs,
+      snapEnabled,
+      setSnapEnabled,
+      snapStepMeters,
+      setSnapStepMeters,
       tool,
       setTool,
       fields,
       setFields,
       selected,
-      setSelected,
+      selectedBodyIds,
+      selectBody,
+      setSelectedBodies,
+      selectField,
+      clearSelection,
       hoveredBodyId,
       setHoveredBodyId,
       hoverReadout,
@@ -394,11 +565,16 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       duplicateSelected,
       undo,
       redo,
+      commitBodyStateChange,
+      commitFieldChange,
       commitWorldAdd,
       commitFieldAdd
     }),
     [
+      clearSelection,
+      commitBodyStateChange,
       commitFieldAdd,
+      commitFieldChange,
       commitWorldAdd,
       copySelected,
       deleteFieldById,
@@ -415,8 +591,16 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       resetNonce,
       redo,
       selected,
+      selectedBodyIds,
+      selectBody,
+      selectField,
+      setSelectedBodies,
       showCollisionPoints,
+      showGraphs,
+      showTrails,
       showVelocityVectors,
+      snapEnabled,
+      snapStepMeters,
       timeScale,
       tool,
       undo
