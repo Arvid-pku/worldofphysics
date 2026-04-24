@@ -5,10 +5,293 @@
 @layer base {
   :root {
     color-scheme: dark;
+    --bg-deep: #05070F;
+    --bg-base: #0A0F1F;
+    --bg-elev: #121A38;
+    --canvas-vignette: radial-gradient(
+      120% 80% at 50% 0%,
+      rgba(30, 122, 255, 0.10) 0%,
+      rgba(5, 7, 15, 0) 60%
+    );
+  }
+
+  html,
+  body {
+    background: var(--bg-base);
+    color: #E6EAF6;
+    font-feature-settings: "cv11", "ss01", "ss03";
   }
 
   ::selection {
-    background: rgba(59, 130, 246, 0.3);
+    background: rgba(61, 151, 255, 0.32);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(123, 140, 200, 0.18);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(123, 140, 200, 0.32);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #05070F, 0 0 0 4px rgba(61, 151, 255, 0.55);
+    border-radius: 6px;
+  }
+
+  /* Range slider — beautiful, consistent across browsers */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 22px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: linear-gradient(
+      to right,
+      rgba(61, 151, 255, 0.85) 0%,
+      rgba(61, 151, 255, 0.85) var(--val, 50%),
+      rgba(255, 255, 255, 0.08) var(--val, 50%),
+      rgba(255, 255, 255, 0.08) 100%
+    );
+    border-radius: 999px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+  }
+  input[type="range"]::-moz-range-progress {
+    height: 4px;
+    background: rgba(61, 151, 255, 0.85);
+    border-radius: 999px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ffffff 0%, #c8dcff 100%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 0 3px rgba(30, 122, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+    margin-top: -5px;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  input[type="range"]:hover::-webkit-slider-thumb {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 5px rgba(30, 122, 255, 0.22), 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ffffff 0%, #c8dcff 100%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 0 3px rgba(30, 122, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+  }
+
+  /* Checkbox refinements */
+  input[type="checkbox"].wop-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    display: inline-grid;
+    place-items: center;
+    transition: all 140ms ease;
+    cursor: pointer;
+  }
+  input[type="checkbox"].wop-check:checked {
+    background: linear-gradient(180deg, #3d97ff 0%, #1e7aff 100%);
+    border-color: rgba(61, 151, 255, 0.6);
+    box-shadow: 0 0 0 3px rgba(30, 122, 255, 0.18), 0 1px 0 rgba(0, 0, 0, 0.5) inset;
+  }
+  input[type="checkbox"].wop-check:checked::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 6.5L5 9.5L10 3.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+      center / contain no-repeat;
+  }
+
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M6 9l6 6 6-6' stroke='%237b8cc8' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 14px;
+    padding-right: 26px;
+    appearance: none;
+    -webkit-appearance: none;
   }
 }
 
+@layer components {
+  .glass {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 32%),
+      rgba(10, 15, 31, 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .glass-strong {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 32%),
+      rgba(14, 21, 48, 0.86);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .surface {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 50%),
+      #0E1530;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .surface-elev {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 50%),
+      #121A38;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .ring-spark {
+    box-shadow:
+      0 0 0 1px rgba(61, 151, 255, 0.45),
+      0 8px 32px -8px rgba(30, 122, 255, 0.55);
+  }
+  .text-mute {
+    color: #8C9AC2;
+  }
+  .text-mute-2 {
+    color: #6B7AA0;
+  }
+
+  .btn-primary {
+    background: linear-gradient(180deg, #3d97ff 0%, #1e7aff 100%);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.25) inset,
+      0 8px 24px -8px rgba(30, 122, 255, 0.6);
+    transition: all 140ms ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.3) inset,
+      0 12px 28px -8px rgba(30, 122, 255, 0.7);
+  }
+  .btn-ghost {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #C9D2EC;
+    transition: all 140ms ease;
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+  .chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #B7C2E5;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+  .kbd {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 60%),
+      rgba(8, 12, 26, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #E6EAF6;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    min-width: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .divider-v {
+    width: 1px;
+    align-self: stretch;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.10) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+  .divider-h {
+    height: 1px;
+    width: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.10) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+}
+
+@layer utilities {
+  .scroll-pretty {
+    scrollbar-color: rgba(123, 140, 200, 0.22) transparent;
+    scrollbar-width: thin;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .dot-bg {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .mask-fade-b {
+    mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  }
+  .mask-fade-r {
+    mask-image: linear-gradient(90deg, #000 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent 100%);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}

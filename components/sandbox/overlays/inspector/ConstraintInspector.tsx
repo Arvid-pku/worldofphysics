@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Cable, Compass, Link2, Ruler, Trash2, Waves } from "lucide-react";
 
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
@@ -8,6 +9,17 @@ import { ensureConstraintMeta, findConstraintByMetaId } from "@/lib/physics/cons
 import { captureConstraintState, type ConstraintState } from "@/lib/physics/constraintState";
 import type { ConstraintKind, ConstraintMode } from "@/lib/physics/types";
 import { metersToWorld, worldToMeters } from "@/lib/physics/units";
+import { cn } from "@/lib/utils/cn";
+
+type Accent = "spark" | "ember" | "violet" | "plasma" | "ok";
+
+const ACCENT_RING: Record<Accent, string> = {
+  spark: "bg-spark-500/10 ring-spark-400/30 text-spark-200",
+  ember: "bg-ember-500/10 ring-ember-400/30 text-ember-300",
+  violet: "bg-violet2-500/10 ring-violet2-400/30 text-violet2-400",
+  plasma: "bg-plasma-500/10 ring-plasma-400/30 text-plasma-300",
+  ok: "bg-ok-500/10 ring-ok-400/30 text-ok-400"
+};
 
 function parseNum(value: string) {
   const n = Number(value);
@@ -19,12 +31,71 @@ function fmt(n: number, digits = 3) {
   return n.toFixed(digits);
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function valueToPct(value: number, min: number, max: number) {
+  if (max <= min) return 0;
+  return Math.max(0, Math.min(1, (value - min) / (max - min))) * 100;
+}
+
+function SectionCard({
+  title,
+  icon,
+  accent = "spark",
+  children
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  accent?: Accent;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mt-4">
-      <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{title}</div>
-      <div className="mt-2 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">{children}</div>
+    <section className="surface rounded-2xl p-3.5">
+      <div className="mb-3 flex items-center gap-2">
+        {icon ? (
+          <span className={cn("grid h-5 w-5 place-items-center rounded ring-1", ACCENT_RING[accent])}>
+            {icon}
+          </span>
+        ) : null}
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-mute-2">
+          {title}
+        </span>
+        <span className="ml-2 h-px flex-1 bg-white/[0.06]" />
+      </div>
+      {children}
     </section>
+  );
+}
+
+function FieldLabel({ label, unit }: { label: string; unit?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11.5px] font-medium text-mute">{label}</span>
+      {unit ? (
+        <span className="font-mono text-[10px] uppercase tracking-wide text-mute-2">{unit}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function NumberInput({
+  value,
+  onChange,
+  onFocus,
+  onBlur
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      inputMode="decimal"
+      className="surface h-9 w-full rounded-lg border-transparent bg-white/[0.02] px-2.5 font-mono text-[12.5px] tabular-nums text-white outline-none transition focus:ring-1 focus:ring-spark-400/40"
+    />
   );
 }
 
@@ -44,19 +115,9 @@ function LabeledNumber({
   unit?: string;
 }) {
   return (
-    <label className="grid gap-1">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        {unit ? <span className="text-[11px] text-slate-600">{unit}</span> : null}
-      </div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        inputMode="decimal"
-        className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
-      />
+    <label className="grid gap-1.5">
+      <FieldLabel label={label} unit={unit} />
+      <NumberInput value={value} onChange={onChange} onFocus={onFocus} onBlur={onBlur} />
     </label>
   );
 }
@@ -80,11 +141,12 @@ function LabeledSlider({
   onPointerDown?: () => void;
   onPointerUp?: () => void;
 }) {
+  const pct = valueToPct(value, min, max);
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        <span className="tabular-nums text-slate-300">{value.toFixed(2)}</span>
+    <div className="grid gap-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11.5px] font-medium text-mute">{label}</span>
+        <span className="font-mono text-[11.5px] tabular-nums text-white">{value.toFixed(2)}</span>
       </div>
       <input
         type="range"
@@ -95,11 +157,20 @@ function LabeledSlider({
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
-        className="h-2 w-full cursor-pointer accent-blue-500"
+        style={{ ["--val" as string]: `${pct}%` } as React.CSSProperties}
+        className="w-full cursor-pointer"
       />
     </div>
   );
 }
+
+function kindIcon(kind: ConstraintKind) {
+  if (kind === "spring") return <Waves className="h-3.5 w-3.5" />;
+  if (kind === "rope" || kind === "rigid_rope") return <Cable className="h-3.5 w-3.5" />;
+  return <Link2 className="h-3.5 w-3.5" />;
+}
+
+const KIND_ORDER: ConstraintKind[] = ["rod", "rope", "rigid_rope", "spring"];
 
 export function ConstraintInspector({ constraintId }: { constraintId: string }) {
   const { t } = useI18n();
@@ -220,120 +291,165 @@ export function ConstraintInspector({ constraintId }: { constraintId: string }) 
 
   if (!constraint) {
     return (
-      <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">
+      <div className="surface rounded-xl p-3 text-[12px] text-mute">
         {t("constraint.notFound")}
       </div>
     );
   }
 
   return (
-    <div className="grid gap-1">
-      <Section title={t("constraint.title")}>
-        <div className="grid gap-3">
-          <div className="grid gap-1">
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>{t("constraint.kind")}</span>
-              <span className="text-slate-200">{t(`constraint.kind.${kind}`)}</span>
-            </div>
-          </div>
-
-          {kind === "spring" ? (
-            <div className="grid gap-3">
-              <label className="grid gap-1">
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{t("constraint.mode")}</span>
-                </div>
-                <select
-                  value={mode}
-                  onChange={(e) => {
-                    beginEdit();
-                    applyMode(e.target.value as ConstraintMode);
-                    commitEdit();
-                  }}
-                  className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
+    <div className="grid gap-3">
+      {/* Type / Kind summary */}
+      <SectionCard
+        title={t("constraint.title")}
+        icon={kindIcon(kind)}
+        accent="spark"
+      >
+        <div className="grid gap-2.5">
+          <FieldLabel label={t("constraint.kind")} />
+          <div className="flex flex-wrap gap-1.5">
+            {KIND_ORDER.map((k) => {
+              const active = k === kind;
+              return (
+                <span
+                  key={k}
+                  aria-pressed={active}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11.5px] font-medium",
+                    active
+                      ? "border-transparent bg-spark-500/15 text-spark-200 ring-1 ring-spark-400/40"
+                      : "border-white/[0.06] bg-white/[0.02] text-mute"
+                  )}
                 >
-                  <option value="distance">{t("constraint.mode.distance")}</option>
-                  <option value="axis">{t("constraint.mode.axis")}</option>
-                </select>
-              </label>
+                  <span className={active ? "text-spark-200" : "text-mute-2"}>
+                    {kindIcon(k)}
+                  </span>
+                  {t(`constraint.kind.${k}` as any)}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </SectionCard>
 
-              {mode === "axis" ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <LabeledNumber
-                    label={t("constraint.axisDirection")}
-                    unit="°"
-                    value={axisDeg}
-                    onChange={setAxisDeg}
-                    onFocus={beginEdit}
-                    onBlur={() => {
-                      applyAxisDeg(axisDeg);
+      {/* Spring mode (only when spring) */}
+      {kind === "spring" ? (
+        <SectionCard
+          title={t("constraint.mode")}
+          icon={<Compass className="h-3 w-3" />}
+          accent="violet"
+        >
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] p-1">
+              {(["distance", "axis"] as ConstraintMode[]).map((m) => {
+                const active = mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      if (active) return;
+                      beginEdit();
+                      applyMode(m);
                       commitEdit();
                     }}
-                  />
-                  <label className="flex items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2">
-                    <span className="text-xs text-slate-300">{t("constraint.guide")}</span>
-                    <input
-                      type="checkbox"
-                      checked={guide}
-                      onChange={(e) => {
-                        beginEdit();
-                        applyGuide(e.target.checked);
-                        commitEdit();
-                      }}
-                      className="h-4 w-4 accent-blue-500"
-                    />
-                  </label>
-                </div>
-              ) : null}
+                    className={cn(
+                      "h-7 rounded-full text-[11.5px] font-medium transition",
+                      active
+                        ? "bg-spark-500/15 text-spark-200 ring-1 ring-spark-400/40"
+                        : "text-mute hover:bg-white/[0.04] hover:text-white"
+                    )}
+                  >
+                    {t(`constraint.mode.${m}` as any)}
+                  </button>
+                );
+              })}
             </div>
-          ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <LabeledNumber
-              label={t("constraint.length")}
-              unit="m"
-              value={lengthM}
-              onChange={setLengthM}
-              onFocus={beginEdit}
-              onBlur={() => {
-                applyLength(lengthM);
-                commitEdit();
-              }}
-            />
+            {mode === "axis" ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <LabeledNumber
+                  label={t("constraint.axisDirection")}
+                  unit="°"
+                  value={axisDeg}
+                  onChange={setAxisDeg}
+                  onFocus={beginEdit}
+                  onBlur={() => {
+                    applyAxisDeg(axisDeg);
+                    commitEdit();
+                  }}
+                />
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 transition hover:bg-white/[0.04]">
+                  <span className="text-[12.5px] font-medium text-white">{t("constraint.guide")}</span>
+                  <input
+                    type="checkbox"
+                    checked={guide}
+                    onChange={(e) => {
+                      beginEdit();
+                      applyGuide(e.target.checked);
+                      commitEdit();
+                    }}
+                    className="wop-check shrink-0"
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
+        </SectionCard>
+      ) : null}
 
-          <div className="grid gap-3">
-            <LabeledSlider
-              label={t("constraint.stiffness")}
-              value={stiffness}
-              min={0}
-              max={1}
-              step={0.01}
-              onChange={applyStiffness}
-              onPointerDown={beginEdit}
-              onPointerUp={commitEdit}
-            />
-            <LabeledSlider
-              label={t("constraint.damping")}
-              value={damping}
-              min={0}
-              max={1}
-              step={0.01}
-              onChange={applyDamping}
-              onPointerDown={beginEdit}
-              onPointerUp={commitEdit}
-            />
-          </div>
+      {/* Length & Stiffness */}
+      <SectionCard
+        title={t("constraint.length")}
+        icon={<Ruler className="h-3 w-3" />}
+        accent="plasma"
+      >
+        <div className="grid gap-3">
+          <LabeledNumber
+            label={t("constraint.length")}
+            unit="m"
+            value={lengthM}
+            onChange={setLengthM}
+            onFocus={beginEdit}
+            onBlur={() => {
+              applyLength(lengthM);
+              commitEdit();
+            }}
+          />
 
-          <button
-            type="button"
-            onClick={() => deleteConstraintById(constraintId)}
-            className="mt-1 h-9 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 text-xs text-rose-200 hover:bg-rose-500/15"
-          >
-            {t("constraint.delete")}
-          </button>
+          <LabeledSlider
+            label={t("constraint.stiffness")}
+            value={stiffness}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={applyStiffness}
+            onPointerDown={beginEdit}
+            onPointerUp={commitEdit}
+          />
+          <LabeledSlider
+            label={t("constraint.damping")}
+            value={damping}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={applyDamping}
+            onPointerDown={beginEdit}
+            onPointerUp={commitEdit}
+          />
         </div>
-      </Section>
+      </SectionCard>
+
+      {/* Delete */}
+      <button
+        type="button"
+        onClick={() => deleteConstraintById(constraintId)}
+        className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12.5px] font-medium text-bad-400 transition hover:bg-bad-500/10 hover:border-bad-500/30"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        {t("constraint.delete")}
+      </button>
     </div>
   );
 }

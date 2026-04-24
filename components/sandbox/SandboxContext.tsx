@@ -43,6 +43,12 @@ export type SandboxState = {
   setRightPanelCollapsed: (value: boolean) => void;
   showLabs: boolean;
   setShowLabs: (value: boolean) => void;
+  showShortcuts: boolean;
+  setShowShortcuts: (value: boolean) => void;
+  showWelcome: boolean;
+  setShowWelcome: (value: boolean) => void;
+  showScenes: boolean;
+  setShowScenes: (value: boolean) => void;
   activeLabId: string | null;
   setActiveLabId: (id: string | null) => void;
   labStepIndex: number;
@@ -125,6 +131,9 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("inspector");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showScenes, setShowScenes] = useState(false);
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
   const [labStepIndex, setLabStepIndex] = useState(0);
   const [fbdAxesMode, setFbdAxesMode] = useState<FbdAxesMode>("world");
@@ -673,6 +682,12 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       setRightPanelCollapsed,
       showLabs,
       setShowLabs,
+      showShortcuts,
+      setShowShortcuts,
+      showWelcome,
+      setShowWelcome,
+      showScenes,
+      setShowScenes,
       activeLabId,
       setActiveLabId,
       labStepIndex,
@@ -769,6 +784,9 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       prevLabStep,
       restartLab,
       showLabs,
+      showShortcuts,
+      showWelcome,
+      showScenes,
       fbdAxesMode,
       fbdReadout,
       showCollisionPoints,

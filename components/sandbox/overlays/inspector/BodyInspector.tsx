@@ -2,7 +2,18 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as Matter from "matter-js";
-import { MoveRight, RotateCw, Shield, Zap } from "lucide-react";
+import {
+  Atom,
+  Compass,
+  Crosshair,
+  Focus,
+  Gauge,
+  MoveRight,
+  Scale,
+  Shield,
+  Tag,
+  Zap
+} from "lucide-react";
 
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { useSandbox } from "@/components/sandbox/SandboxContext";
@@ -22,6 +33,16 @@ import { cn } from "@/lib/utils/cn";
 type TriadKey = "mass" | "density" | "volume";
 type Triad = Record<TriadKey, string>;
 
+type Accent = "spark" | "ember" | "violet" | "plasma" | "ok";
+
+const ACCENT_RING: Record<Accent, string> = {
+  spark: "bg-spark-500/10 ring-spark-400/30 text-spark-200",
+  ember: "bg-ember-500/10 ring-ember-400/30 text-ember-300",
+  violet: "bg-violet2-500/10 ring-violet2-400/30 text-violet2-400",
+  plasma: "bg-plasma-500/10 ring-plasma-400/30 text-plasma-300",
+  ok: "bg-ok-500/10 ring-ok-400/30 text-ok-400"
+};
+
 function parseNum(value: string) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -30,6 +51,11 @@ function parseNum(value: string) {
 function fmt(n: number, digits = 3) {
   if (!Number.isFinite(n)) return "";
   return n.toFixed(digits);
+}
+
+function valueToPct(value: number, min: number, max: number) {
+  if (max <= min) return 0;
+  return Math.max(0, Math.min(1, (value - min) / (max - min))) * 100;
 }
 
 function computeTriad(next: Triad, edited: TriadKey): Triad {
@@ -55,15 +81,66 @@ function computeTriad(next: Triad, edited: TriadKey): Triad {
   return next;
 }
 
-function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  icon,
+  accent = "spark",
+  children
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  accent?: Accent;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mt-4">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-        {icon}
-        <span>{title}</span>
+    <section className="surface rounded-2xl p-3.5">
+      <div className="mb-3 flex items-center gap-2">
+        {icon ? (
+          <span className={cn("grid h-5 w-5 place-items-center rounded ring-1", ACCENT_RING[accent])}>
+            {icon}
+          </span>
+        ) : null}
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-mute-2">
+          {title}
+        </span>
+        <span className="ml-2 h-px flex-1 bg-white/[0.06]" />
       </div>
-      <div className="mt-2 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">{children}</div>
+      {children}
     </section>
+  );
+}
+
+function FieldLabel({ label, unit }: { label: string; unit?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11.5px] font-medium text-mute">{label}</span>
+      {unit ? (
+        <span className="font-mono text-[10px] uppercase tracking-wide text-mute-2">{unit}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function NumberInput({
+  value,
+  onChange,
+  onFocus,
+  onBlur
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      inputMode="decimal"
+      className="surface h-9 w-full rounded-lg border-transparent bg-white/[0.02] px-2.5 font-mono text-[12.5px] tabular-nums text-white outline-none transition focus:ring-1 focus:ring-spark-400/40"
+    />
   );
 }
 
@@ -83,19 +160,9 @@ function LabeledNumber({
   unit?: string;
 }) {
   return (
-    <label className="grid gap-1">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        {unit ? <span className="text-[11px] text-slate-600">{unit}</span> : null}
-      </div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        inputMode="decimal"
-        className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
-      />
+    <label className="grid gap-1.5">
+      <FieldLabel label={label} unit={unit} />
+      <NumberInput value={value} onChange={onChange} onFocus={onFocus} onBlur={onBlur} />
     </label>
   );
 }
@@ -121,13 +188,14 @@ function LabeledSlider({
   onPointerUp?: () => void;
   unit?: string;
 }) {
+  const pct = valueToPct(value, min, max);
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        <span className="tabular-nums text-slate-300">
+    <div className="grid gap-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11.5px] font-medium text-mute">{label}</span>
+        <span className="font-mono text-[11.5px] tabular-nums text-white">
           {value.toFixed(2)}
-          {unit ? ` ${unit}` : ""}
+          {unit ? <span className="ml-1 text-[10px] text-mute-2">{unit}</span> : null}
         </span>
       </div>
       <input
@@ -139,19 +207,22 @@ function LabeledSlider({
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
-        className="h-2 w-full cursor-pointer accent-blue-500"
+        style={{ ["--val" as string]: `${pct}%` } as React.CSSProperties}
+        className="w-full cursor-pointer"
       />
     </div>
   );
 }
 
-function Toggle({
+function SwitchRow({
   label,
+  hint,
   checked,
   onChange,
   disabled
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
@@ -159,16 +230,19 @@ function Toggle({
   return (
     <label
       className={cn(
-        "flex items-center justify-between gap-3 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2",
+        "flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 transition hover:bg-white/[0.04]",
         disabled ? "pointer-events-none opacity-40" : ""
       )}
     >
-      <span className="text-xs text-slate-300">{label}</span>
+      <div className="min-w-0">
+        <div className="text-[12.5px] font-medium text-white">{label}</div>
+        {hint ? <div className="mt-0.5 text-[10.5px] text-mute-2">{hint}</div> : null}
+      </div>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-blue-500"
+        className="wop-check shrink-0"
         disabled={disabled}
       />
     </label>
@@ -257,7 +331,7 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
 
   if (!body) {
     return (
-      <div className="rounded-lg border border-slate-900 bg-slate-950/50 p-3 text-xs text-slate-400">
+      <div className="surface rounded-xl p-3 text-[12px] text-mute">
         {t("body.notFound")}
       </div>
     );
@@ -278,32 +352,35 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
     if (volume && volume > 0) meta.volume = volume;
   };
 
-  const glow = isCharged && Number(charge) !== 0;
-  const glowClass =
-    glow && Number(charge) > 0 ? "shadow-glowBlue border-blue-500/30" : glow ? "shadow-glowRed border-red-500/30" : "";
+  const chargeNum = Number(charge);
+  const chargeAccent: Accent = chargeNum < 0 ? "ember" : "spark";
+  const emAccent: Accent = isCharged && chargeNum !== 0 ? chargeAccent : "spark";
 
   const isFrame = referenceFrameBodyId === bodyId;
 
   return (
-    <div>
-      <div className={cn("rounded-xl border border-slate-800/70 bg-slate-950/40 p-3", glowClass)}>
-        <div className="text-xs text-slate-500">{t("body.label")}</div>
-        <input
+    <div className="grid gap-3">
+      {/* Identity / Label */}
+      <SectionCard title={t("body.label")} icon={<Tag className="h-3 w-3" />} accent="spark">
+        <NumberInput
           value={label}
-          onFocus={beginPropsEdit}
-          onChange={(e) => {
-            const v = e.target.value;
+          onChange={(v) => {
             setLabel(v);
             meta.label = v;
           }}
+          onFocus={beginPropsEdit}
           onBlur={commitPropsEdit}
-          className="mt-1 h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
         />
-      </div>
+      </SectionCard>
 
-      <Section title={t("section.referenceFrame")}>
-        <div className="grid gap-3">
-          <Toggle
+      {/* Reference Frame */}
+      <SectionCard
+        title={t("section.referenceFrame")}
+        icon={<Focus className="h-3 w-3" />}
+        accent="violet"
+      >
+        <div className="grid gap-2">
+          <SwitchRow
             label={t("frame.useAsFrame")}
             checked={isFrame}
             onChange={(v) => {
@@ -315,17 +392,22 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               }
             }}
           />
-          <Toggle
+          <SwitchRow
             label={t("frame.follow")}
             checked={isFrame && referenceFrameFollow}
             disabled={!isFrame}
             onChange={(v) => setReferenceFrameFollow(v)}
           />
         </div>
-      </Section>
+      </SectionCard>
 
-      <Section title={t("section.triad")} icon={<Shield className="h-3.5 w-3.5" />}>
-        <div className="grid grid-cols-3 gap-3">
+      {/* Mass / Density / Volume */}
+      <SectionCard
+        title={t("section.triad")}
+        icon={<Scale className="h-3 w-3" />}
+        accent="spark"
+      >
+        <div className="grid grid-cols-3 gap-2">
           <LabeledNumber
             label={t("triad.mass")}
             unit="kg"
@@ -351,12 +433,15 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             onBlur={commitPropsEdit}
           />
         </div>
-        <div className="mt-2 text-[11px] text-slate-500">
-          {t("triad.tip")}
-        </div>
-      </Section>
+        <div className="mt-2.5 text-[10.5px] leading-snug text-mute-2">{t("triad.tip")}</div>
+      </SectionCard>
 
-      <Section title={t("section.material")} icon={<RotateCw className="h-3.5 w-3.5" />}>
+      {/* Material */}
+      <SectionCard
+        title={t("section.material")}
+        icon={<Shield className="h-3 w-3" />}
+        accent="ok"
+      >
         <div className="grid gap-3">
           <LabeledSlider
             label={t("material.restitution")}
@@ -364,7 +449,6 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
-            unit="—"
             onPointerDown={beginPropsEdit}
             onPointerUp={commitPropsEdit}
             onChange={(v) => {
@@ -378,7 +462,6 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
-            unit="—"
             onPointerDown={beginPropsEdit}
             onPointerUp={commitPropsEdit}
             onChange={(v) => {
@@ -392,7 +475,6 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             min={0}
             max={1}
             step={0.01}
-            unit="—"
             onPointerDown={beginPropsEdit}
             onPointerUp={commitPropsEdit}
             onChange={(v) => {
@@ -401,11 +483,16 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
           />
         </div>
-      </Section>
+      </SectionCard>
 
-      <Section title={t("section.em")} icon={<Zap className="h-3.5 w-3.5" />}>
+      {/* Electromagnetism */}
+      <SectionCard
+        title={t("section.em")}
+        icon={<Zap className="h-3 w-3" />}
+        accent={emAccent}
+      >
         <div className="grid gap-3">
-          <Toggle
+          <SwitchRow
             label={t("em.isCharged")}
             checked={isCharged}
             onChange={(v) => {
@@ -417,43 +504,50 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
             }}
           />
 
-          <LabeledNumber
-            label={t("em.charge")}
-            value={charge}
-            onChange={(v) => {
-              setCharge(v);
-              const q = parseNum(v);
-              meta.charge = q ?? 0;
-            }}
-            unit="C"
-            onFocus={beginPropsEdit}
-            onBlur={commitPropsEdit}
-          />
-          <div className="text-[11px] text-slate-500">{t("em.chargeHint")}</div>
-
-          <label className="grid gap-1">
-            <div className="text-xs text-slate-400">{t("em.distribution")}</div>
-            <select
-              value={distribution}
-              onChange={(e) => {
-                const before = captureBodyState(body);
-                const v = e.target.value as ChargeDistribution;
-                setDistribution(v);
-                meta.chargeDistribution = v;
-                const after = captureBodyState(body);
-                commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
+          <div className={cn("grid gap-3", isCharged ? "" : "opacity-50")}>
+            <LabeledNumber
+              label={t("em.charge")}
+              value={charge}
+              onChange={(v) => {
+                setCharge(v);
+                const q = parseNum(v);
+                meta.charge = q ?? 0;
               }}
-              className="h-9 w-full rounded-md border border-slate-800 bg-slate-950/50 px-2 text-sm text-slate-100 outline-none focus:border-blue-500/50"
-            >
-              <option value="point">{t("em.distribution.point")}</option>
-              <option value="uniform">{t("em.distribution.uniform")}</option>
-            </select>
-          </label>
-        </div>
-      </Section>
+              unit="C"
+              onFocus={beginPropsEdit}
+              onBlur={commitPropsEdit}
+            />
+            <div className="text-[10.5px] leading-snug text-mute-2">{t("em.chargeHint")}</div>
 
-      <Section title={t("section.kinematics")}>
-        <div className="grid grid-cols-3 gap-3">
+            <label className="grid gap-1.5">
+              <FieldLabel label={t("em.distribution")} />
+              <select
+                value={distribution}
+                onChange={(e) => {
+                  const before = captureBodyState(body);
+                  const v = e.target.value as ChargeDistribution;
+                  setDistribution(v);
+                  meta.chargeDistribution = v;
+                  const after = captureBodyState(body);
+                  commitBodyStateChange({ bodyId, before, after, apply: { transform: false, shape: false, kinematics: false } });
+                }}
+                className="surface h-9 w-full rounded-lg border-transparent bg-white/[0.02] px-2.5 text-[12.5px] text-white outline-none focus:ring-1 focus:ring-spark-400/40"
+              >
+                <option value="point">{t("em.distribution.point")}</option>
+                <option value="uniform">{t("em.distribution.uniform")}</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Kinematics */}
+      <SectionCard
+        title={t("section.kinematics")}
+        icon={<Gauge className="h-3 w-3" />}
+        accent="plasma"
+      >
+        <div className="grid grid-cols-3 gap-2">
           <LabeledNumber label={t("kin.velX")} unit="m/s" value={velX} onChange={setVelX} />
           <LabeledNumber label={t("kin.velY")} unit="m/s" value={velY} onChange={setVelY} />
           <LabeledNumber label={t("kin.angVel")} unit="rad/s" value={angVel} onChange={setAngVel} />
@@ -472,8 +566,9 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               if (w !== null) Matter.Body.setAngularVelocity(body, radpsToWorldAngularVelocityBaseStep(w));
               commitKinematicsEdit(before);
             }}
-            className="h-9 flex-1 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
+            className="btn-primary flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12.5px] font-semibold"
           >
+            <Compass className="h-3.5 w-3.5" />
             {t("kin.apply")}
           </button>
           <button
@@ -487,16 +582,22 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               Matter.Body.setAngularVelocity(body, 0);
               commitKinematicsEdit(before);
             }}
-            className="h-9 rounded-md border border-slate-800 bg-slate-950/40 px-3 text-sm text-slate-200 hover:bg-slate-900/50"
+            className="btn-ghost flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[12.5px]"
           >
+            <Crosshair className="h-3.5 w-3.5" />
             {t("kin.zero")}
           </button>
         </div>
-      </Section>
+      </SectionCard>
 
-      <Section title={t("section.conveyor")} icon={<MoveRight className="h-3.5 w-3.5" />}>
+      {/* Conveyor */}
+      <SectionCard
+        title={t("section.conveyor")}
+        icon={<MoveRight className="h-3 w-3" />}
+        accent="ember"
+      >
         <div className="grid gap-3">
-          <Toggle
+          <SwitchRow
             label={t("conveyor.enabled")}
             checked={conveyorEnabled}
             onChange={(v) => {
@@ -536,7 +637,6 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
               min={0}
               max={1}
               step={0.01}
-              unit="—"
               onPointerDown={beginPropsEdit}
               onPointerUp={commitPropsEdit}
               onChange={(v) => {
@@ -544,10 +644,21 @@ export function BodyInspector({ bodyId }: { bodyId: string }) {
                 if (conveyorEnabled) ensureConveyorMeta(body, { grip: v });
               }}
             />
-            <div className="text-[11px] text-slate-500">{t("conveyor.hint")}</div>
+            <div className="text-[10.5px] leading-snug text-mute-2">{t("conveyor.hint")}</div>
           </div>
         </div>
-      </Section>
+      </SectionCard>
+
+      {/* Decorative atom marker for charged bodies — purely visual */}
+      {isCharged && chargeNum !== 0 ? (
+        <div className="flex items-center justify-center gap-1.5 text-[10.5px] text-mute-2">
+          <Atom className={cn("h-3 w-3", chargeNum < 0 ? "text-ember-300" : "text-spark-200")} />
+          <span className="font-mono tabular-nums">
+            {chargeNum > 0 ? "+" : ""}
+            {chargeNum} C
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
