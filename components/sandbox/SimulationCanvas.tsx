@@ -637,7 +637,26 @@ export function SimulationCanvas() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      ctx.fillStyle = "rgba(2, 6, 23, 1)";
+      // Deep cosmic gradient base
+      const baseGradient = ctx.createLinearGradient(0, 0, 0, height);
+      baseGradient.addColorStop(0, "#080D1F");
+      baseGradient.addColorStop(1, "#04060E");
+      ctx.fillStyle = baseGradient;
+      ctx.fillRect(0, 0, width, height);
+
+      // Subtle top spotlight wash (independent of camera)
+      const spotlight = ctx.createRadialGradient(
+        width * 0.5,
+        -height * 0.2,
+        0,
+        width * 0.5,
+        -height * 0.2,
+        Math.max(width, height) * 0.9
+      );
+      spotlight.addColorStop(0, "rgba(61, 151, 255, 0.18)");
+      spotlight.addColorStop(0.45, "rgba(61, 151, 255, 0.05)");
+      spotlight.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = spotlight;
       ctx.fillRect(0, 0, width, height);
 
       const camera = cameraRef.current;
@@ -652,23 +671,46 @@ export function SimulationCanvas() {
       ctx.scale(camera.zoom, camera.zoom);
       ctx.translate(-camera.x, -camera.y);
 
-      const grid = 80;
-      const x0 = Math.floor(left / grid) * grid;
-      const y0 = Math.floor(top / grid) * grid;
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+      // Major + minor dotted grid — world-space, fades on zoom
+      const grid = 80; // major grid in world px (~1.6m at 50px/m)
+      const minor = grid / 4; // minor grid 20px (~0.4m)
+      const x0 = Math.floor(left / minor) * minor;
+      const y0 = Math.floor(top / minor) * minor;
+
+      // Minor: tiny dots
+      const dotSize = Math.max(0.5, 0.8 / camera.zoom);
+      ctx.fillStyle = "rgba(180, 200, 255, 0.06)";
+      for (let x = x0; x <= right; x += minor) {
+        for (let y = y0; y <= bottom; y += minor) {
+          // Skip major-grid intersections (drawn larger below)
+          if (x % grid === 0 && y % grid === 0) continue;
+          ctx.beginPath();
+          ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // Major: brighter dot at intersections
+      const xMaj0 = Math.floor(left / grid) * grid;
+      const yMaj0 = Math.floor(top / grid) * grid;
+      const majDot = Math.max(1, 1.4 / camera.zoom);
+      ctx.fillStyle = "rgba(180, 200, 255, 0.16)";
+      for (let x = xMaj0; x <= right; x += grid) {
+        for (let y = yMaj0; y <= bottom; y += grid) {
+          ctx.beginPath();
+          ctx.arc(x, y, majDot, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Origin axes — soft cyan crosshair
       ctx.lineWidth = 1 / camera.zoom;
-      for (let x = x0; x <= right; x += grid) {
-        ctx.beginPath();
-        ctx.moveTo(x, top);
-        ctx.lineTo(x, bottom);
-        ctx.stroke();
-      }
-      for (let y = y0; y <= bottom; y += grid) {
-        ctx.beginPath();
-        ctx.moveTo(left, y);
-        ctx.lineTo(right, y);
-        ctx.stroke();
-      }
+      ctx.strokeStyle = "rgba(61, 151, 255, 0.18)";
+      ctx.beginPath();
+      ctx.moveTo(left, 0);
+      ctx.lineTo(right, 0);
+      ctx.moveTo(0, top);
+      ctx.lineTo(0, bottom);
+      ctx.stroke();
 
       // Field regions
       const selectedEntity = selectedRef.current;
@@ -808,10 +850,43 @@ export function SimulationCanvas() {
         if (isPrimarySelected) primaryBody = body;
 
         ctx.setLineDash([]);
-        ctx.fillStyle = isStatic ? "rgba(15, 23, 42, 0.85)" : "rgba(15, 23, 42, 0.95)";
-        ctx.strokeStyle = isStatic ? "rgba(148, 163, 184, 0.25)" : "rgba(226, 232, 240, 0.25)";
         ctx.lineWidth = 1.25 / camera.zoom;
         ctx.shadowBlur = 0;
+
+        // Compute body bounds for gradient direction
+        const bx = body.position.x;
+        const by = body.position.y;
+        const bw = body.bounds.max.x - body.bounds.min.x;
+        const bh = body.bounds.max.y - body.bounds.min.y;
+        const bRadius = body.circleRadius || Math.max(bw, bh) / 2;
+
+        // Build a soft top-lit gradient for visual depth.
+        let fillStyle: string | CanvasGradient;
+        if (isStatic) {
+          const g = ctx.createLinearGradient(bx, body.bounds.min.y, bx, body.bounds.max.y);
+          g.addColorStop(0, "rgba(28, 38, 70, 0.92)");
+          g.addColorStop(1, "rgba(10, 15, 31, 0.92)");
+          fillStyle = g;
+        } else {
+          // Off-center radial gradient — feels like top-left light.
+          const g = ctx.createRadialGradient(
+            bx - bRadius * 0.35,
+            by - bRadius * 0.35,
+            bRadius * 0.1,
+            bx,
+            by,
+            bRadius * 1.15
+          );
+          g.addColorStop(0, "rgba(50, 70, 130, 0.95)");
+          g.addColorStop(0.55, "rgba(20, 30, 65, 0.96)");
+          g.addColorStop(1, "rgba(8, 12, 26, 0.96)");
+          fillStyle = g;
+        }
+
+        ctx.fillStyle = fillStyle;
+        ctx.strokeStyle = isStatic
+          ? "rgba(180, 200, 255, 0.18)"
+          : "rgba(220, 232, 255, 0.30)";
 
         if (isConveyor) {
           ctx.fillStyle = "rgba(15, 23, 42, 0.7)";
@@ -821,7 +896,7 @@ export function SimulationCanvas() {
         }
 
         if (isSensor) {
-          ctx.fillStyle = "rgba(2, 6, 23, 0.2)";
+          ctx.fillStyle = "rgba(168, 85, 247, 0.07)";
           ctx.strokeStyle = "rgba(168, 85, 247, 0.75)";
           ctx.lineWidth = 1.5 / camera.zoom;
           ctx.setLineDash([10 / camera.zoom, 8 / camera.zoom]);
@@ -830,9 +905,9 @@ export function SimulationCanvas() {
 
         if (isCharged) {
           const glow =
-            (meta?.charge ?? 0) > 0 ? "rgba(59, 130, 246, 0.75)" : "rgba(239, 68, 68, 0.75)";
+            (meta?.charge ?? 0) > 0 ? "rgba(61, 151, 255, 0.75)" : "rgba(244, 63, 94, 0.75)";
           ctx.shadowColor = glow;
-          ctx.shadowBlur = 18 / camera.zoom;
+          ctx.shadowBlur = 20 / camera.zoom;
           ctx.strokeStyle = glow;
         }
 
@@ -850,6 +925,17 @@ export function SimulationCanvas() {
         }
         ctx.fill();
         ctx.stroke();
+
+        // Subtle specular highlight on dynamic circles — small white arc top-left.
+        if (!isStatic && body.circleRadius && !isSensor) {
+          ctx.shadowBlur = 0;
+          const r = body.circleRadius;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
+          ctx.beginPath();
+          ctx.arc(bx - r * 0.32, by - r * 0.32, r * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
         ctx.setLineDash([]);
 
         if (isSensor && sensor) {
@@ -1361,12 +1447,7 @@ export function SimulationCanvas() {
 
       ctx.restore();
 
-      // HUD
-      ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
-      ctx.font = "12px ui-sans-serif, system-ui, -apple-system";
-      ctx.fillText(`Bodies: ${Matter.Composite.allBodies(engine.world).length}`, 16, 28);
-      ctx.fillText(`Tool: ${settings.tool}`, 16, 46);
-      ctx.fillText(`Camera: (${camera.x.toFixed(0)}, ${camera.y.toFixed(0)}) z=${camera.zoom.toFixed(2)}`, 16, 64);
+      // HUD intentionally omitted — chrome (TopControls) shows status instead.
 
       raf = window.requestAnimationFrame(draw);
     };
@@ -2443,95 +2524,153 @@ function syncConstraintRestLengthToCurrent(constraint: Matter.Constraint) {
   constraint.damping = meta.damping;
 }
 
-const AXIS_SPRING_K_MAX = 3000; // N/m at stiffness=1
-const AXIS_SPRING_C_MAX = 450; // N·s/m at damping=1
+const SPRING_K_MAX = 3000; // N/m at stiffness=1
+const SPRING_C_MAX = 450; // N·s/m at damping=1
 const AXIS_SPRING_GUIDE_MULT = 14;
-const AXIS_SPRING_FORCE_LIMIT = 0.25; // Matter force units
+const SPRING_FORCE_LIMIT_N = 5000; // hard cap to prevent runaway, in Newtons
 
-function applyAxisSprings(engine: Matter.Engine, dtMs: number) {
-  if (!Number.isFinite(dtMs) || dtMs <= 0) return;
+function pointVelocityMps(body: Matter.Body, attachWorld: { x: number; y: number }) {
+  const vx = worldVelocityStepToMps(body.velocity.x);
+  const vy = worldVelocityStepToMps(body.velocity.y);
+  const omega = worldAngularVelocityStepToRadps(body.angularVelocity);
+  const rxm = worldToMeters(attachWorld.x - body.position.x);
+  const rym = worldToMeters(attachWorld.y - body.position.y);
+  return { vx: vx - omega * rym, vy: vy + omega * rxm };
+}
+
+// Apply spring forces using true Hooke's law (F = -k·Δx − c·v).
+// Matter's `Constraint.solve` computes iterative position corrections, NOT a
+// physical spring — for example a Matter constraint with stiffness=0.5 snaps
+// nearly-rigidly each frame. We disable that and inject the real force here so
+// springs oscillate with the period that intro physics would predict
+// (T = 2π·√(m/k)).
+function applyAxisSprings(_engine: Matter.Engine, _dtMs: number) {
+  const engine = _engine;
   const constraints = Matter.Composite.allConstraints(engine.world);
+  const toMatter = PX_PER_METER / 1_000_000;
   for (const c of constraints) {
     const meta = getConstraintMeta(c);
     if (!meta) continue;
     if (meta.kind !== "spring") continue;
-    if (meta.mode !== "axis") continue;
 
-    const bothBodies = Boolean(c.bodyA && c.bodyB);
-    if (bothBodies) {
-      meta.mode = "distance";
-      c.stiffness = meta.stiffness;
-      c.damping = meta.damping;
-      continue;
-    }
-
-    const body = c.bodyA ?? c.bodyB ?? null;
-    if (!body || body.isStatic) continue;
-
-    const attachEndpoint: "A" | "B" = c.bodyA ? "A" : "B";
-    const anchorEndpoint: "A" | "B" = attachEndpoint === "A" ? "B" : "A";
-    const attachWorld = getConstraintEndpointWorld(c, attachEndpoint);
-    const anchorWorld = getConstraintEndpointWorld(c, anchorEndpoint);
-    if (!attachWorld || !anchorWorld) continue;
-
-    // Disable Matter's distance solver; we apply forces manually.
+    // Always disable Matter's iterative position correction for springs.
     c.stiffness = 0;
     c.damping = 0;
 
-    const axisAngle = Number.isFinite(meta.axisAngleRad)
-      ? (meta.axisAngleRad as number)
-      : Math.atan2(attachWorld.y - anchorWorld.y, attachWorld.x - anchorWorld.x);
-    meta.axisAngleRad = axisAngle;
-
-    const axis = { x: Math.cos(axisAngle), y: Math.sin(axisAngle) };
-    const perp = { x: -axis.y, y: axis.x };
-
-    const dx = attachWorld.x - anchorWorld.x;
-    const dy = attachWorld.y - anchorWorld.y;
-    const dxm = worldToMeters(dx);
-    const dym = worldToMeters(dy);
-
-    const alongM = dxm * axis.x + dym * axis.y;
-    const perpM = dxm * perp.x + dym * perp.y;
-    const restM = worldToMeters(meta.restLength);
-    const extM = alongM - restM;
-
-    const vx = worldVelocityStepToMps(body.velocity.x, dtMs);
-    const vy = worldVelocityStepToMps(body.velocity.y, dtMs);
-    const omega = worldAngularVelocityStepToRadps(body.angularVelocity, dtMs);
-    const rxm = worldToMeters(attachWorld.x - body.position.x);
-    const rym = worldToMeters(attachWorld.y - body.position.y);
-    const vpx = vx - omega * rym;
-    const vpy = vy + omega * rxm;
-    const vAlong = vpx * axis.x + vpy * axis.y;
-    const vPerp = vpx * perp.x + vpy * perp.y;
+    const aWorld = getConstraintEndpointWorld(c, "A");
+    const bWorld = getConstraintEndpointWorld(c, "B");
+    if (!aWorld || !bWorld) continue;
 
     const stiffness = Math.min(1, Math.max(0, meta.stiffness));
     const damping = Math.min(1, Math.max(0, meta.damping));
-    const k = stiffness * AXIS_SPRING_K_MAX;
-    const cDamp = damping * AXIS_SPRING_C_MAX;
+    const k = stiffness * SPRING_K_MAX;
+    const cDamp = damping * SPRING_C_MAX;
+    const restM = worldToMeters(meta.restLength);
 
-    const fAlongN = -k * extM - cDamp * vAlong;
-    let fPerpN = 0;
-    const guideEnabled = meta.guide ?? true;
-    if (guideEnabled) {
-      fPerpN = -(k * AXIS_SPRING_GUIDE_MULT) * perpM - (cDamp * AXIS_SPRING_GUIDE_MULT) * vPerp;
+    const bothBodies = Boolean(c.bodyA && c.bodyB);
+
+    if (bothBodies) {
+      // Two-body spring: classic Hooke along the line connecting both attach
+      // points. Apply equal-and-opposite forces (Newton's third law).
+      const bodyA = c.bodyA as Matter.Body;
+      const bodyB = c.bodyB as Matter.Body;
+      const dxPx = aWorld.x - bWorld.x;
+      const dyPx = aWorld.y - bWorld.y;
+      const distPx = Math.hypot(dxPx, dyPx);
+      if (distPx < 1e-6) continue;
+      const ux = dxPx / distPx;
+      const uy = dyPx / distPx;
+      const distM = worldToMeters(distPx);
+      const extM = distM - restM;
+
+      const vA = pointVelocityMps(bodyA, aWorld);
+      const vB = pointVelocityMps(bodyB, bWorld);
+      // Relative velocity of A relative to B, projected onto spring axis (A→B).
+      const vRel = (vA.vx - vB.vx) * ux + (vA.vy - vB.vy) * uy;
+
+      const fMagN = -k * extM - cDamp * vRel; // along (A->B). Positive = A pushed in +u
+      const fxN = fMagN * ux;
+      const fyN = fMagN * uy;
+      const fxAbs = Math.abs(fxN);
+      const fyAbs = Math.abs(fyN);
+      const fmagN = Math.hypot(fxN, fyN);
+      if (!Number.isFinite(fmagN)) continue;
+      const clamped = fmagN > SPRING_FORCE_LIMIT_N ? SPRING_FORCE_LIMIT_N / fmagN : 1;
+      const fxApp = fxN * clamped * toMatter;
+      const fyApp = fyN * clamped * toMatter;
+      // F on A is +(fxN,fyN); F on B is the negative.
+      if (!bodyA.isStatic) Matter.Body.applyForce(bodyA, aWorld, { x: fxApp, y: fyApp });
+      if (!bodyB.isStatic) Matter.Body.applyForce(bodyB, bWorld, { x: -fxApp, y: -fyApp });
+      // For two-body springs, axis mode doesn't apply.
+      if (meta.mode === "axis") meta.mode = "distance";
+      void fxAbs;
+      void fyAbs;
+      continue;
     }
 
-    // Convert N -> Matter force units.
-    const toMatter = PX_PER_METER / 1_000_000;
-    let fx = (axis.x * fAlongN + perp.x * fPerpN) * toMatter;
-    let fy = (axis.y * fAlongN + perp.y * fPerpN) * toMatter;
+    // One-body spring (the other end is a fixed world anchor).
+    const body = c.bodyA ?? c.bodyB ?? null;
+    if (!body || body.isStatic) continue;
+    const attachEndpoint: "A" | "B" = c.bodyA ? "A" : "B";
+    const attachWorld = attachEndpoint === "A" ? aWorld : bWorld;
+    const anchorWorld = attachEndpoint === "A" ? bWorld : aWorld;
 
-    const mag = Math.hypot(fx, fy);
-    if (mag > AXIS_SPRING_FORCE_LIMIT) {
-      const s = AXIS_SPRING_FORCE_LIMIT / (mag || 1);
-      fx *= s;
-      fy *= s;
+    if (meta.mode === "axis") {
+      // Constrained-along-axis spring (e.g., the Atwood guide rails).
+      const axisAngle = Number.isFinite(meta.axisAngleRad)
+        ? (meta.axisAngleRad as number)
+        : Math.atan2(attachWorld.y - anchorWorld.y, attachWorld.x - anchorWorld.x);
+      meta.axisAngleRad = axisAngle;
+      const axis = { x: Math.cos(axisAngle), y: Math.sin(axisAngle) };
+      const perp = { x: -axis.y, y: axis.x };
+
+      const dxm = worldToMeters(attachWorld.x - anchorWorld.x);
+      const dym = worldToMeters(attachWorld.y - anchorWorld.y);
+      const alongM = dxm * axis.x + dym * axis.y;
+      const perpM = dxm * perp.x + dym * perp.y;
+      const extM = alongM - restM;
+
+      const v = pointVelocityMps(body, attachWorld);
+      const vAlong = v.vx * axis.x + v.vy * axis.y;
+      const vPerp = v.vx * perp.x + v.vy * perp.y;
+
+      const fAlongN = -k * extM - cDamp * vAlong;
+      let fPerpN = 0;
+      if (meta.guide ?? true) {
+        fPerpN = -(k * AXIS_SPRING_GUIDE_MULT) * perpM - (cDamp * AXIS_SPRING_GUIDE_MULT) * vPerp;
+      }
+      const fxN = axis.x * fAlongN + perp.x * fPerpN;
+      const fyN = axis.y * fAlongN + perp.y * fPerpN;
+      const mag = Math.hypot(fxN, fyN);
+      if (!Number.isFinite(mag)) continue;
+      const clamped = mag > SPRING_FORCE_LIMIT_N ? SPRING_FORCE_LIMIT_N / mag : 1;
+      Matter.Body.applyForce(body, attachWorld, {
+        x: fxN * clamped * toMatter,
+        y: fyN * clamped * toMatter
+      });
+      continue;
     }
 
-    if (!Number.isFinite(fx) || !Number.isFinite(fy)) continue;
-    Matter.Body.applyForce(body, attachWorld, { x: fx, y: fy });
+    // Distance-mode one-body spring: classic Hooke along anchor->attach.
+    const dxPx = attachWorld.x - anchorWorld.x;
+    const dyPx = attachWorld.y - anchorWorld.y;
+    const distPx = Math.hypot(dxPx, dyPx);
+    if (distPx < 1e-6) continue;
+    const ux = dxPx / distPx;
+    const uy = dyPx / distPx;
+    const extM = worldToMeters(distPx) - restM;
+    const v = pointVelocityMps(body, attachWorld);
+    const vRel = v.vx * ux + v.vy * uy;
+    const fMagN = -k * extM - cDamp * vRel;
+    const fxN = fMagN * ux;
+    const fyN = fMagN * uy;
+    const mag = Math.hypot(fxN, fyN);
+    if (!Number.isFinite(mag)) continue;
+    const clamped = mag > SPRING_FORCE_LIMIT_N ? SPRING_FORCE_LIMIT_N / mag : 1;
+    Matter.Body.applyForce(body, attachWorld, {
+      x: fxN * clamped * toMatter,
+      y: fyN * clamped * toMatter
+    });
   }
 }
 

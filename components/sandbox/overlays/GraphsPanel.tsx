@@ -70,10 +70,11 @@ export function GraphsPanel() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const samplesRef = useRef<Sample[]>([]);
   const lastRef = useRef<{
-    timeMs: number;
+    simTimeMs: number;
     vx: number;
     vy: number;
-    impulse: number;
+    pX0: number;
+    pY0: number;
   } | null>(null);
 
   useEffect(() => {
@@ -85,7 +86,6 @@ export function GraphsPanel() {
     let raf = 0;
 
     const loop = () => {
-      const now = performance.now();
       const engine = engineRef.current;
       if (!engine || !bodyId) {
         raf = window.requestAnimationFrame(loop);
@@ -98,7 +98,17 @@ export function GraphsPanel() {
         return;
       }
 
-      const dtMs = engine.timing.lastDelta || 1000 / 60;
+      // Use simulation time, not wall-clock — so pausing doesn't fill the graph
+      // with flat samples and the X axis shows real physics time.
+      const simTimeMs = engine.timing.timestamp ?? 0;
+      // If the engine was reset (simTime went backwards), clear our state so
+      // we start a fresh sample buffer rather than waiting for sim time to
+      // catch back up to the old recorded value.
+      if (lastRef.current && simTimeMs + 1 < lastRef.current.simTimeMs) {
+        lastRef.current = null;
+        samplesRef.current = [];
+      }
+
       let frameX = 0;
       let frameY = 0;
       let frameVx = 0;
@@ -108,36 +118,54 @@ export function GraphsPanel() {
         if (frameBody) {
           frameX = frameBody.position.x;
           frameY = frameBody.position.y;
-          frameVx = worldVelocityStepToMps(frameBody.velocity.x, dtMs);
-          frameVy = worldVelocityStepToMps(frameBody.velocity.y, dtMs);
+          frameVx = worldVelocityStepToMps(frameBody.velocity.x);
+          frameVy = worldVelocityStepToMps(frameBody.velocity.y);
         }
       }
 
-      const vx = worldVelocityStepToMps(body.velocity.x, dtMs) - frameVx;
-      const vy = worldVelocityStepToMps(body.velocity.y, dtMs) - frameVy;
+      const vx = worldVelocityStepToMps(body.velocity.x) - frameVx;
+      const vy = worldVelocityStepToMps(body.velocity.y) - frameVy;
 
       const last = lastRef.current;
-      const dtSec = last ? (now - last.timeMs) / 1000 : 0;
-      const ax = last && dtSec > 0 ? (vx - last.vx) / dtSec : 0;
-      const ay = last && dtSec > 0 ? (vy - last.vy) / dtSec : 0;
+      const dtSimSec = last ? Math.max(0, (simTimeMs - last.simTimeMs) / 1000) : 0;
+      // Skip sample if simulation hasn't advanced (e.g., paused).
+      if (last && dtSimSec <= 1e-6) {
+        raf = window.requestAnimationFrame(loop);
+        return;
+      }
+
+      const ax = last && dtSimSec > 0 ? (vx - last.vx) / dtSimSec : 0;
+      const ay = last && dtSimSec > 0 ? (vy - last.vy) / dtSimSec : 0;
       const accel = Math.hypot(ax, ay);
 
       const speed = Math.hypot(vx, vy);
       const x = worldToMeters(body.position.x - frameX);
-      const y = worldToMeters(body.position.y - frameY);
+      // Convert canvas-y to "height": y axis points down on screen, so height
+      // above the origin is -y. PE uses gravity (could be negative) and height.
+      const yMeters = worldToMeters(body.position.y - frameY);
+      const height = -yMeters;
 
       const ke = 0.5 * body.mass * speed * speed;
-      const pe = body.mass * gravity * -y;
+      // PE = m·g·h. With gravity negative (e.g., upward), PE inverts properly.
+      const pe = body.mass * gravity * height;
       const energy = ke + pe;
+      // Momentum scalar — magnitude of the velocity-vector momentum.
       const momentum = body.mass * speed;
 
-      const impulse = clamp((last?.impulse ?? 0) + (body.mass * accel) * Math.max(0, dtSec), 0, 1e9);
+      // Impulse since first sample = magnitude of momentum change vector.
+      // |Δp| = |m·v(t) − m·v(0)|. Bounded — stops growing once velocity stops
+      // changing — instead of the previous unbounded ∫|F|dt running sum.
+      const pX = body.mass * vx;
+      const pY = body.mass * vy;
+      const pX0 = last?.pX0 ?? pX;
+      const pY0 = last?.pY0 ?? pY;
+      const impulse = clamp(Math.hypot(pX - pX0, pY - pY0), 0, 1e9);
 
-      lastRef.current = { timeMs: now, vx, vy, impulse };
-      const tSec = samplesRef.current.length > 0 ? samplesRef.current[samplesRef.current.length - 1]!.t + Math.max(0, dtSec) : 0;
+      lastRef.current = { simTimeMs, vx, vy, pX0, pY0 };
+      const tSec = simTimeMs / 1000;
 
       const samples = samplesRef.current;
-      samples.push({ t: tSec, x, y, speed, accel, ke, pe, energy, momentum, impulse });
+      samples.push({ t: tSec, x, y: yMeters, speed, accel, ke, pe, energy, momentum, impulse });
       if (samples.length > 600) samples.splice(0, samples.length - 600);
 
       raf = window.requestAnimationFrame(loop);
@@ -164,7 +192,10 @@ export function GraphsPanel() {
       ctx.clearRect(0, 0, rect.width, rect.height);
 
       // background
-      ctx.fillStyle = "rgba(2, 6, 23, 0.35)";
+      const bg = ctx.createLinearGradient(0, 0, 0, rect.height);
+      bg.addColorStop(0, "rgba(14, 21, 48, 0.55)");
+      bg.addColorStop(1, "rgba(5, 7, 15, 0.55)");
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, rect.width, rect.height);
 
       const samples = samplesRef.current;
@@ -202,7 +233,7 @@ export function GraphsPanel() {
       max += yPad;
 
       // grid
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+      ctx.strokeStyle = "rgba(180, 200, 255, 0.07)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let i = 0; i <= 4; i += 1) {
@@ -212,18 +243,55 @@ export function GraphsPanel() {
       }
       ctx.stroke();
 
-      // axis labels
-      ctx.fillStyle = "rgba(148, 163, 184, 0.8)";
-      ctx.font = "11px ui-sans-serif, system-ui, -apple-system";
-      ctx.fillText(`${metricLabel.label} (${metricLabel.unit})`, left, 14);
-      ctx.fillText(`${fmt(max)}`, left, top - 4);
-      ctx.fillText(`${fmt(min)}`, left, bottom + 14);
+      // zero baseline if visible
+      if (min < 0 && max > 0) {
+        const zeroY = bottom - (-min / (max - min)) * (bottom - top);
+        ctx.strokeStyle = "rgba(255,255,255,0.20)";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(left, zeroY);
+        ctx.lineTo(right, zeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // axis labels — value range on right, time on bottom
+      ctx.fillStyle = "rgba(166, 177, 216, 0.75)";
+      ctx.font = "10px ui-monospace, monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(`${fmt(max)}`, right - 4, top + 10);
+      ctx.fillText(`${fmt(min)}`, right - 4, bottom - 2);
+      ctx.textAlign = "left";
       ctx.fillText(`${fmt(t0)}s`, left, bottom + 14);
-      ctx.fillText(`${fmt(t1)}s`, right - 42, bottom + 14);
+      ctx.textAlign = "right";
+      ctx.fillText(`${fmt(t1)}s`, right, bottom + 14);
+      ctx.textAlign = "left";
+
+      // Filled area under line
+      const areaGrad = ctx.createLinearGradient(0, top, 0, bottom);
+      areaGrad.addColorStop(0, "rgba(60, 223, 255, 0.30)");
+      areaGrad.addColorStop(1, "rgba(60, 223, 255, 0.0)");
+      ctx.fillStyle = areaGrad;
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i += 1) {
+        const s = samples[i]!;
+        const tx = (s.t - t0) / dt;
+        const ty = (s[metric] - min) / (max - min);
+        const x = left + tx * (right - left);
+        const y = bottom - ty * (bottom - top);
+        if (i === 0) ctx.moveTo(x, bottom);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(right, bottom);
+      ctx.closePath();
+      ctx.fill();
 
       // line
-      ctx.strokeStyle = "rgba(59, 130, 246, 0.9)";
-      ctx.lineWidth = 1.5;
+      const lineGrad = ctx.createLinearGradient(left, 0, right, 0);
+      lineGrad.addColorStop(0, "#3D97FF");
+      lineGrad.addColorStop(1, "#15CDF5");
+      ctx.strokeStyle = lineGrad;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       for (let i = 0; i < samples.length; i += 1) {
         const s = samples[i]!;
@@ -236,6 +304,20 @@ export function GraphsPanel() {
       }
       ctx.stroke();
 
+      // Live point dot
+      const lastSample = samples[samples.length - 1]!;
+      const ltx = (lastSample.t - t0) / dt;
+      const lty = (lastSample[metric] - min) / (max - min);
+      const lx = left + ltx * (right - left);
+      const ly = bottom - lty * (bottom - top);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.shadowColor = "rgba(60,223,255,0.8)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
       raf = window.requestAnimationFrame(draw);
     };
 
@@ -243,54 +325,75 @@ export function GraphsPanel() {
     return () => window.cancelAnimationFrame(raf);
   }, [metric, metricLabel.label, metricLabel.unit]);
 
+  const METRIC_OPTIONS: { value: MetricKey; label: string; group: string }[] = [
+    { value: "x", label: "x(t)  m", group: "Position" },
+    { value: "y", label: "y(t)  m", group: "Position" },
+    { value: "speed", label: "|v|(t)  m/s", group: "Motion" },
+    { value: "accel", label: "|a|(t)  m/s²", group: "Motion" },
+    { value: "ke", label: "KE(t)  J", group: "Energy" },
+    { value: "pe", label: "PE(t)  J", group: "Energy" },
+    { value: "energy", label: "E(t)  J", group: "Energy" },
+    { value: "momentum", label: "|p|(t)  kg·m/s", group: "Dynamics" },
+    { value: "impulse", label: "|J|(t)  N·s", group: "Dynamics" }
+  ];
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/40 shadow-xl backdrop-blur">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-800/70 px-4 py-3">
-        <div className="text-sm font-semibold text-slate-100">{t("graphs.title")}</div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-slate-300">
-            <span className="text-slate-400">{t("graphs.metric")}</span>
-            <select
-              value={metric}
-              onChange={(e) => setMetric(e.target.value as MetricKey)}
-              className="h-8 rounded-md border border-slate-800 bg-slate-950/60 px-2 text-xs text-slate-200 outline-none"
+    <div className="surface overflow-hidden rounded-2xl">
+      <header className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-1">
+          {METRIC_OPTIONS.slice(0, 4).map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMetric(m.value)}
+              className={cn(
+                "h-7 rounded-full px-2.5 font-mono text-[10.5px] font-medium transition",
+                metric === m.value
+                  ? "bg-plasma-500/15 text-plasma-300 ring-1 ring-plasma-400/40"
+                  : "text-mute hover:bg-white/[0.04] hover:text-white"
+              )}
             >
-              <option value="x">x(t) (m)</option>
-              <option value="y">y(t) (m)</option>
-              <option value="speed">|v|(t) (m/s)</option>
-              <option value="accel">|a|(t) (m/s²)</option>
-              <option value="ke">KE(t) (J)</option>
-              <option value="pe">PE(t) (J)</option>
-              <option value="energy">E(t) (J)</option>
-              <option value="momentum">|p|(t) (kg·m/s)</option>
-              <option value="impulse">|J|(t) (N·s)</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              samplesRef.current = [];
-              lastRef.current = null;
-            }}
-            className={cn(
-              "h-8 rounded-md border border-slate-800 bg-slate-950/40 px-2 text-xs text-slate-200 hover:bg-slate-900/50",
-              !bodyId ? "opacity-60" : ""
-            )}
-            disabled={!bodyId}
-          >
-            {t("graphs.clear")}
-          </button>
+              {m.label}
+            </button>
+          ))}
         </div>
+        <select
+          value={metric}
+          onChange={(e) => setMetric(e.target.value as MetricKey)}
+          className="surface h-7 rounded-md border border-white/[0.08] bg-white/[0.02] px-1.5 font-mono text-[10.5px] text-white outline-none"
+          aria-label={t("graphs.metric")}
+        >
+          {METRIC_OPTIONS.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
       </header>
 
       <div className="p-3">
         {!bodyId ? (
-          <div className="grid place-items-center rounded-lg border border-slate-800/60 bg-slate-950/40 p-6 text-xs text-slate-400">
-            {t("graphs.empty")}
+          <div className="surface grid place-items-center rounded-xl px-4 py-10 text-center text-[12px] text-mute">
+            <div className="font-display text-[14px] font-semibold text-white">
+              {t("graphs.empty")}
+            </div>
+            <div className="mt-1 text-[11px] text-mute-2">
+              Click a body on the canvas to start sampling.
+            </div>
           </div>
         ) : (
-          <div className="h-[240px] rounded-lg border border-slate-800/60 bg-slate-950/30">
+          <div className="relative h-[230px] overflow-hidden rounded-xl bg-white/[0.02] ring-1 ring-white/[0.05]">
             <canvas ref={canvasRef} className="h-full w-full" />
+            <button
+              type="button"
+              onClick={() => {
+                samplesRef.current = [];
+                lastRef.current = null;
+              }}
+              className="absolute right-2 top-2 rounded-md bg-white/[0.04] px-2 py-1 text-[10.5px] text-mute hover:bg-white/[0.08] hover:text-white"
+            >
+              {t("graphs.clear")}
+            </button>
           </div>
         )}
       </div>
